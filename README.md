@@ -39,16 +39,36 @@ Part of the LiquiFact stack: **frontend** (Next.js) | **backend** (this repo) | 
 
 ## Development
 
-| Command        | Description                    |
-|----------------|--------------------------------|
-| `npm run dev`  | Start API with watch mode      |
-| `npm run start`| Start API (production-style)  |
-| `npm run lint` | Run ESLint on `src/`          |
+| Command               | Description                             |
+|-----------------------|-----------------------------------------|
+| `npm run dev`         | Start API with watch mode               |
+| `npm run start`       | Start API (production-style)           |
+| `npm run lint`        | Run ESLint on `src/`                   |
+| `npm run lint:fix`    | Auto-fix linting issues                |
+| `npm test`            | Run unit tests (Vitest)                |
+| `npm run test:coverage`| Run tests with coverage report         |
 
 Default port: **3001**. After starting:
 
 - Health: [http://localhost:3001/health](http://localhost:3001/health)
 - API info: [http://localhost:3001/api](http://localhost:3001/api)
+
+---
+
+## Code Quality & Testing
+
+### ESLint Rule Hardening
+We enforce strict linting rules using `eslint:recommended` and `eslint-plugin-security`. All code must include JSDoc comments for better maintainability.
+
+- **Local Workflow**: Before committing, run `npm run lint:fix` to automatically address style issues.
+- **CI Enforcement**: The CI pipeline will fail if linting errors are present or if test coverage falls below **95%**.
+
+### Testing
+We use **Vitest** and **Supertest** for testing.
+- Run tests: `npm test`
+- Check coverage: `npm run test:coverage`
+
+Current coverage targets: **>95% Lines and Statements**.
 
 ---
 

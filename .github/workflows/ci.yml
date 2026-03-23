@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  build-and-lint:
+  lint-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +23,9 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Test and Coverage
+        run: npm run test:coverage
 
       - name: Build check
         run: node --check src/index.js
