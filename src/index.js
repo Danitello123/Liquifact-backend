@@ -6,11 +6,13 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
+const { globalLimiter, sensitiveLimiter } = require('./middleware/rateLimit');
 const { authenticateToken } = require('./middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+app.use(globalLimiter);
 app.use(cors());
 app.use(express.json());
 
@@ -45,7 +47,7 @@ app.get('/api/invoices', (req, res) => {
   });
 });
 
-app.post('/api/invoices', authenticateToken, (req, res) => {
+app.post('/api/invoices', authenticateToken, sensitiveLimiter, (req, res) => {
   res.status(201).json({
     data: { id: 'placeholder', status: 'pending_verification' },
     message: 'Invoice upload will be implemented with verification and tokenization.',
@@ -61,7 +63,7 @@ app.get('/api/escrow/:invoiceId', (req, res) => {
   });
 });
 
-app.post('/api/escrow', authenticateToken, (req, res) => {
+app.post('/api/escrow', authenticateToken, sensitiveLimiter, (req, res) => {
   res.status(200).json({
     data: { status: 'funded' },
     message: 'Escrow write operation simulating contract call.',
