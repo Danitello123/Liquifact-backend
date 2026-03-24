@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import request from 'supertest';
-import { app, resetStore, startServer } from './index';
+const request = require('supertest');
+const { app, resetStore, startServer } = require('./index');
 
 describe('LiquiFact API', () => {
   beforeEach(() => {
@@ -114,7 +113,7 @@ describe('LiquiFact API', () => {
     });
 
     it('error handler - returns 500 on unexpected error', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
       const response = await request(app).get('/error-test-trigger');
       expect(response.status).toBe(500);
       consoleSpy.mockRestore();
@@ -131,8 +130,8 @@ describe('LiquiFact API', () => {
 
   describe('Server', () => {
     it('startServer - starts the server and returns it', () => {
-      const mockServer = { close: vi.fn() };
-      const listenSpy = vi.spyOn(app, 'listen').mockImplementation((port, cb) => {
+      const mockServer = { close: jest.fn() };
+      const listenSpy = jest.spyOn(app, 'listen').mockImplementation((port, cb) => {
         if (cb) { cb(); }
         return mockServer;
       });

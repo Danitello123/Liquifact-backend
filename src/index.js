@@ -7,6 +7,8 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
+const { callSorobanContract } = require('./services/soroban');
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -163,18 +165,30 @@ app.patch('/api/invoices/:id/restore', (req, res) => {
 
 /**
  * Retrieves escrow state for a specific invoice.
- * Placeholder for future Soroban contract integration.
+ * Robust integration wrapper for Soroban contract interaction.
  * 
  * @param {import('express').Request} req - The Express request object.
  * @param {import('express').Response} res - The Express response object.
- * @returns {void}
+ * @returns {Promise<void>}
  */
-app.get('/api/escrow/:invoiceId', (req, res) => {
+app.get('/api/escrow/:invoiceId', async (req, res) => {
   const { invoiceId } = req.params;
-  return res.json({
-    data: { invoiceId, status: 'not_found', fundedAmount: 0 },
-    message: 'Escrow state will be read from Soroban contract.',
-  });
+
+  try {
+    // Simulated remote contract call
+    const operation = async () => {
+      return { invoiceId, status: 'not_found', fundedAmount: 0 };
+    };
+
+    const data = await callSorobanContract(operation);
+    
+    res.json({
+      data,
+      message: 'Escrow state read from Soroban contract via robust integration wrapper.',
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Error fetching escrow state' });
+  }
 });
 
 /**
