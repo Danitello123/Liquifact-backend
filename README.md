@@ -88,6 +88,7 @@ In case of an error:
 ```
 liquifact-backend/
 ├── src/
+<<<<<<< HEAD
 │   ├── app.js               # Express application setup
 │   ├── index.js             # Server entry point
 │   ├── utils/
@@ -95,9 +96,32 @@ liquifact-backend/
 │   └── tests/
 │       └── response.test.js # Coverage-backed integration tests
 ├── .env.example
+=======
+│   ├── services/
+│   │   └── soroban.js  # Contract interaction wrappers
+│   ├── utils/
+│   │   └── retry.js    # Exponential backoff utility
+│   └── index.js        # Express app, routes
+├── .env.example        # Env template
+>>>>>>> main
 ├── eslint.config.js
 └── package.json
 ```
+
+---
+
+## Resiliency & Retries
+
+To ensure reliable communication with Soroban contract provider APIs, this backend implements a robust **Retry and Backoff** mechanism (`src/utils/retry.js`). 
+
+### Key Features
+- **Exponential Backoff (`withRetry`)**: Automatically retries transient errors (e.g., HTTP 429, 502, 503, 504, network timeouts).
+- **Jitter**: Adds ±20% randomness to the delay to prevent thundering herd problems.
+- **Security Caps**:
+  - `maxRetries` is hard-capped at 10 to prevent unbounded retry loops.
+  - `maxDelay` is hard-capped to 60,000ms (1 minute).
+  - `baseDelay` is hard-capped to 10,000ms.
+- **Contract Integration**: `src/services/soroban.js` wraps raw API calls securely with this utility, ensuring all escrow and invoice state interactions are fault-tolerant.
 
 ---
 

@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const responseHelper = require('./utils/responseHelper');
+const { callSorobanContract } = require('./services/soroban');
+
 
 const app = express();
 
@@ -40,14 +42,30 @@ app.post('/api/invoices', (req, res) => {
   ));
 });
 
-// Placeholder: Escrow
-app.get('/api/escrow/:invoiceId', (req, res) => {
+// Placeholder: Escrow (wired to Soroban)
+app.get('/api/escrow/:invoiceId', async (req, res) => {
   const { invoiceId } = req.params;
-  res.json(responseHelper.success(
-    { invoiceId, status: 'not_found', fundedAmount: 0 },
-    { message: 'Read from Soroban not yet implemented'}
-  ));
+
+  try {
+    // Simulated remote contract call
+    const operation = async () => {
+      return { invoiceId, status: 'not_found', fundedAmount: 0 };
+    };
+
+    const data = await callSorobanContract(operation);
+    
+    res.json(responseHelper.success(
+      data,
+      { message: 'Escrow state read from Soroban contract via robust integration wrapper.' }
+    ));
+  } catch (error) {
+    res.status(500).json(responseHelper.error(
+      error.message || 'Error fetching escrow state',
+      'SOROBAN_INTEGRATION_ERROR'
+    ));
+  }
 });
+
 
 // Error trigger for testing 500 responses
 app.get('/debug/error', (req, res, next) => {

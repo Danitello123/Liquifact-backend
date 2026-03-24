@@ -1,10 +1,10 @@
 /**
  * LiquiFact API Gateway
- * Standard Entry Point for the API server.
+ * Main entrance for the backend server.
  */
 
-require('dotenv').config();
 const app = require('./app');
+require('dotenv').config();
 
 const PORT = process.env.PORT || 3001;
 
