@@ -167,6 +167,24 @@ To ensure reliable communication with Soroban contract provider APIs, this backe
 
 ---
 
+## Invoice Filtering & Sorting
+
+Endpoint: GET /invoices
+
+Query Parameters:
+- status: paid | pending | overdue
+- sme: SME ID
+- buyer: Buyer ID
+- dateFrom: ISO date
+- dateTo: ISO date
+- sortBy: amount | date
+- order: asc | desc
+
+Example:
+GET /invoices?status=paid&sortBy=amount&order=desc
+
+---
+
 ## CI/CD
 
 GitHub Actions runs on every push and pull request to `main`:
