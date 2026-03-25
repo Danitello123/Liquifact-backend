@@ -90,6 +90,17 @@ The middleware authenticates the token against the `JWT_SECRET` environment vari
 
 ---
 
+## Rate Limiting
+
+The API implements request throttling to prevent abuse:
+
+- **Global Limit**: 100 requests per 15 minutes per IP or User ID.
+- **Sensitive Operations**: (Invoice uploads, Escrow writes) 10 requests per hour per IP.
+
+Clients exceeding these limits will receive a `429 Too Many Requests` response. Check the standard `RateLimit-*` headers for your current quota and reset time.
+
+---
+
 ## Project structure
 
 ```
