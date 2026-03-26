@@ -2,12 +2,14 @@ const AppError = require('../errors/AppError');
 const formatProblemDetails = require('../utils/problemDetails');
 
 /**
- * Global error handling middleware
+ * Global error handler middleware.
  * Ensures consistent error responses and prevents stack leaks in production.
- * @param err
- * @param req
- * @param res
- * @param _next
+ *
+ * @param {Error} err - Error object.
+ * @param {import('express').Request} req - Express request object.
+ * @param {import('express').Response} res - Express response object.
+ * @param {import('express').NextFunction} _next - Express next callback.
+ * @returns {void}
  */
 function errorHandler(err, req, res, _next) {
   let problem;

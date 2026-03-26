@@ -2,14 +2,14 @@
  * @fileoverview Express application factory for the LiquiFact API.
  *
  * Wires together all middleware and routes in the correct order:
- *   1. CORS policy (environment-driven allowlist, 403 on blocked origins)
- *   2. Request body-size guardrails (100 KB global JSON, 512 KB invoice limit)
- *   3. URL-encoded body parser (50 KB limit)
- *   4. Application routes (health, api-info, invoices, escrow)
- *   5. 404 catch-all
- *   6. CORS error handler  → 403 JSON
- *   7. Payload-too-large handler → 413 JSON
- *   8. Generic internal-error handler → 500 JSON
+ * 1. CORS policy (environment-driven allowlist, 403 on blocked origins)
+ * 2. Request body-size guardrails (100 KB global JSON, 512 KB invoice limit)
+ * 3. URL-encoded body parser (50 KB limit)
+ * 4. Application routes (health, api-info, invoices, escrow)
+ * 5. 404 catch-all
+ * 6. CORS error handler  → 403 JSON
+ * 7. Payload-too-large handler → 413 JSON
+ * 8. Generic internal-error handler → 500 JSON
  *
  * @module app
  */
