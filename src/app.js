@@ -129,9 +129,7 @@ function createApp() {
   app.get('/api/escrow/:invoiceId', async (req, res) => {
     const { invoiceId } = req.params;
     try {
-      /**
-       *
-       */
+      // Simulated remote contract call
       const operation = async () => {
         return { invoiceId, status: 'not_found', fundedAmount: 0 };
       };
@@ -148,6 +146,9 @@ function createApp() {
   /**
    * Simulated error route for testing error handling middleware.
    *
+   * @param {import('express').Request} req Express request.
+   * @param {import('express').Response} res Express response.
+   * @param {import('express').NextFunction} next Express next callback.
    * @returns {void}
    */
   app.get('/error', (req, res, next) => {
