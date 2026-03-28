@@ -176,14 +176,9 @@ app.patch('/api/invoices/:id/restore', authenticateToken, (req, res) => {
   if (!invoices[invoiceIndex].deletedAt) {
     return res.status(400).json({ error: 'Invoice is not deleted' });
   }
-
-  // eslint-disable-next-line security/detect-object-injection
-  invoices[invoiceIndex].deletedAt = null;
-
-  return res.json({
-    message: 'Invoice restored successfully.',
-    // eslint-disable-next-line security/detect-object-injection
-    data: invoices[invoiceIndex],
+  res.status(201).json({
+    data: { id: 'placeholder', status: 'pending_verification' },
+    message: 'Invoice upload will be implemented with verification and tokenization.',
   });
 });
 
@@ -229,10 +224,15 @@ app.get('/api/escrow/:invoiceId', authenticateToken, async (req, res) => {
  * @returns {void}
  */
 app.use((req, res, next) => {
-  if (req.path === '/error-test-trigger') {
-    return next(new Error('Test error'));
-  }
-  return res.status(404).json({ error: 'Not found', path: req.path });
+  next(
+    new AppError({
+      type: 'https://liquifact.com/probs/not-found',
+      title: 'Resource Not Found',
+      status: 404,
+      detail: `The path ${req.path} does not exist.`,
+      instance: req.originalUrl,
+    })
+  );
 });
 
 /**
