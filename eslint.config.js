@@ -52,7 +52,7 @@ module.exports = [
     },
   },
   {
-    files: ['src/**/*.test.js', 'src/__tests__/**/*.js'],
+    files: ['src/**/*.test.js', 'src/__tests__/**/*.js', 'src/**/__mocks__/**/*.js'],
     languageOptions: {
       sourceType: 'module',
       globals: {

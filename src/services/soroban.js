@@ -151,6 +151,7 @@ async function withRetry(operation, config) {
  *
  * @template T
  * @param {() => Promise<T>} operation - Async function wrapping the contract call.
+ * @param {Object} [config] - Optional retry configuration overrides.
  * @returns {Promise<T>} Result of the contract call.
  *
  * @example
