@@ -23,6 +23,7 @@ require('dotenv').config();
 const { callSorobanContract } = require('./services/soroban');
 const { createCorsOptions, isCorsOriginRejectedError } = require('./config/cors');
 const { sanitizeInput } = require('./middleware/sanitizeInput');
+const { validateInvoiceQueryParams } = require('./utils/validators');
 const {
   invoiceBodyLimit,
   payloadTooLargeHandler,
@@ -121,19 +122,37 @@ function createApp() {
   // Invoices — GET (list)
   app.get('/api/invoices', async (req, res, next) => {
     try {
-      let data = [];
-      try {
-        const invoiceService = require('./services/invoice.service');
-        if (invoiceService && typeof invoiceService.getInvoices === 'function') {
-          data = await invoiceService.getInvoices(req.query);
-        }
-      } catch {
-        data = [];
+      const validation = validateInvoiceQueryParams(req.query);
+      if (!validation.isValid) {
+        res.status(400).json({ errors: validation.errors });
+        return;
       }
+
+      let invoiceService;
+      try {
+        invoiceService = require('./services/invoice.service');
+      } catch {
+        res.json({
+          data: [],
+          message: 'Invoices retrieved successfully.',
+        });
+        return;
+      }
+
+      if (!invoiceService || typeof invoiceService.getInvoices !== 'function') {
+        res.json({
+          data: [],
+          message: 'Invoices retrieved successfully.',
+        });
+        return;
+      }
+
+      const data = await invoiceService.getInvoices(validation.validatedParams);
       res.json({
         data,
         message: 'Invoices retrieved successfully.',
       });
+      return;
     } catch (error) {
       next(error);
     }

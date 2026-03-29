@@ -70,6 +70,9 @@ function isRetryable(err) {
   if (!err) {
     return false;
   }
+  if (isTransientError(err)) {
+    return true;
+  }
   if (err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT') {
     return true;
   }
