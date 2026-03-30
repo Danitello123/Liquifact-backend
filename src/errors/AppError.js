@@ -1,30 +1,30 @@
-const { randomUUID } = require('crypto');
-
 /**
- * Application error with stable API-facing metadata.
+ * Custom Error class for RFC 7807 compliant errors.
+ * Extends the built-in Error class to include Problem Details fields.
  */
 class AppError extends Error {
   /**
-   * @param {object} options Error options.
-   * @param {string} options.code Stable machine-readable error code.
-   * @param {string} options.message Safe user-facing message.
-   * @param {number} options.status HTTP status code.
-   * @param {boolean} options.retryable Whether the caller may safely retry.
-   * @param {string} options.retryHint Safe retry guidance.
-   * @param {boolean} [options.expose=true] Whether the message is safe to expose.
+  * Creates a new AppError instance.
+  *
+   * @param {Object} params
+   * @param {string} params.type - A URI reference [RFC3986] that identifies the problem type.
+   * @param {string} params.title - A short, human-readable summary of the problem type.
+   * @param {number} params.status - The HTTP status code (e.g., 400, 404, 500).
+   * @param {string} params.detail - A human-readable explanation specific to this occurrence of the problem.
+   * @param {string} [params.instance] - A URI reference that identifies the specific occurrence of the problem.
    */
-  constructor({ code, message, status, retryable, retryHint, expose = true }) {
-    super(message || 'Request failed');
-    this.name = 'AppError';
-    this.code = code || 'INTERNAL_SERVER_ERROR';
+  constructor({ type, title, status, detail, instance }) {
+    super(title);
+    this.name = this.constructor.name;
+    this.type = type || 'about:blank';
+    this.title = title;
     this.status = status || 500;
-    this.retryable = Boolean(retryable);
-    this.retryHint = retryHint || 'Do not retry until the issue is resolved.';
-    this.expose = expose;
-    this.id = randomUUID();
+    this.detail = detail;
+    this.instance = instance;
+
+    // Capture stack trace, excluding constructor call from it
+    Error.captureStackTrace(this, this.constructor);
   }
 }
 
-module.exports = {
-  AppError,
-};
+module.exports = AppError;
