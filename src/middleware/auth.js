@@ -1,105 +1,49 @@
-const { timingSafeEqual } = require('crypto');
+/**
+ * Authentication Middleware
+ * Validates JWT tokens in the Authorization header.
+ * @module middleware/auth
+ */
 
-const { AppError } = require('../errors/AppError');
+const jwt = require('jsonwebtoken');
 
 /**
- * Parse a Bearer Authorization header into its token value.
- *
- * @param {string | undefined} headerValue Raw Authorization header value.
- * @returns {string}
+ * Middleware function to enforce authentication for protected routes.
+ * It checks the "Authorization" header for a "Bearer <token>" pattern.
+ * If valid, it attaches the decoded token payload to `req.user`.
+ * 
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @param {import('express').NextFunction} next - Express next middleware function
+ * @returns {void}
  */
-function parseBearerAuthorizationHeader(headerValue) {
-  if (typeof headerValue !== 'string') {
-    throw new AppError({
-      status: 401,
-      code: 'AUTHENTICATION_REQUIRED',
-      message: 'Authentication is required for this endpoint.',
-      retryable: false,
-      retryHint: 'Provide a valid Bearer token and try again.',
-    });
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Authentication token is required' });
   }
 
-  const trimmedHeader = headerValue.trim();
-  if (trimmedHeader.length === 0) {
-    throw new AppError({
-      status: 400,
-      code: 'VALIDATION_ERROR',
-      message: 'Authorization header is malformed.',
-      retryable: false,
-      retryHint: 'Send a Bearer token in the Authorization header and try again.',
-    });
+  const tokenParts = authHeader.split(' ');
+  
+  if (tokenParts.length !== 2 || tokenParts[0] !== 'Bearer') {
+    return res.status(401).json({ error: 'Invalid Authorization header format. Expected "Bearer <token>"' });
   }
 
-  const parts = trimmedHeader.split(/\s+/);
-  if (parts.length !== 2 || parts[0] !== 'Bearer' || parts[1].includes(',')) {
-    throw new AppError({
-      status: 400,
-      code: 'VALIDATION_ERROR',
-      message: 'Authorization header is malformed.',
-      retryable: false,
-      retryHint: 'Send a Bearer token in the Authorization header and try again.',
-    });
-  }
+  const token = tokenParts[1];
+  const secret = process.env.JWT_SECRET || 'test-secret'; // Fallback for local testing if env is not completely set
 
-  return parts[1];
-}
-
-/**
- * Compare token strings without leaking early-match timing.
- *
- * @param {string} actualToken Token supplied by the client.
- * @param {string} expectedToken Token configured by the server.
- * @returns {boolean}
- */
-function tokensMatch(actualToken, expectedToken) {
-  const actual = Buffer.from(actualToken, 'utf8');
-  const expected = Buffer.from(expectedToken, 'utf8');
-
-  if (actual.length !== expected.length) {
-    return false;
-  }
-
-  return timingSafeEqual(actual, expected);
-}
-
-/**
- * Create a Bearer-token middleware for protected routes.
- *
- * @param {{ token?: string }} [options] Auth middleware configuration.
- * @returns {import('express').RequestHandler}
- */
-function requireBearerToken(options = {}) {
-  const expectedToken = options.token ?? process.env.TEST_API_TOKEN ?? '';
-
-  return (req, _res, next) => {
-    let token;
-
-    try {
-      token = parseBearerAuthorizationHeader(req.header('authorization'));
-    } catch (error) {
-      next(error);
-      return;
+  jwt.verify(token, secret, (err, decoded) => {
+    if (err) {
+      if (err.name === 'TokenExpiredError') {
+        return res.status(401).json({ error: 'Token has expired' });
+      }
+      return res.status(401).json({ error: 'Invalid token' });
     }
-
-    if (!expectedToken || !tokensMatch(token, expectedToken)) {
-      next(
-        new AppError({
-          status: 401,
-          code: 'INVALID_TOKEN',
-          message: 'The provided access token is invalid.',
-          retryable: false,
-          retryHint: 'Provide a valid Bearer token and try again.',
-        }),
-      );
-      return;
-    }
-
+    
+    // Attach user info to the request pattern
+    req.user = decoded;
     next();
-  };
-}
-
-module.exports = {
-  parseBearerAuthorizationHeader,
-  tokensMatch,
-  requireBearerToken,
+  });
 };
+
+module.exports = { authenticateToken };

@@ -2,16 +2,14 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "src/index.js",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js",
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
     "lint": "eslint src/",
-    "test:jest": "jest --runInBand src/services/soroban.test.js src/utils/retry.test.js",
-    "test:node": "node --test tests/load/config.test.js tests/load/reporter.test.js tests/errors-unit.test.js tests/api-errors.test.js tests/middleware-security.test.js",
-    "test": "npm run test:jest && npm run test:node",
-    "test:coverage": "npm run test:jest -- --coverage && node --test --experimental-test-coverage tests/load/config.test.js tests/load/reporter.test.js tests/errors-unit.test.js tests/api-errors.test.js tests/middleware-security.test.js",
-    "load:baseline": "node tests/load/run-baselines.js"
+    "lint:fix": "eslint src/ --fix",
+    "test": "jest",
+    "test:coverage": "jest --coverage"
   },
   "keywords": [],
   "author": "",
@@ -20,13 +18,31 @@
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.3.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3"
   },
   "devDependencies": {
-    "autocannon": "^8.0.0",
-    "c8": "^11.0.0",
-    "eslint": "^10.0.3",
+    "eslint": "^9.21.0",
+    "eslint-plugin-jsdoc": "^50.6.3",
+    "eslint-plugin-security": "^3.0.1",
+    "globals": "^16.0.0",
     "jest": "^30.3.0",
-    "supertest": "^7.2.2"
+    "supertest": "^7.0.0"
+  },
+  "jest": {
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/server.js"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "lines": 95,
+        "statements": 95,
+        "functions": 95,
+        "branches": 80
+      }
+    }
   }
 }
