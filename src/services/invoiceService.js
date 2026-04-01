@@ -1,55 +1,49 @@
 /**
  * Invoice Service
- * Handles data retrieval for invoice listings with pagination.
+ * Handles data retrieval and business logic for invoices.
  */
 
-// Generate a larger set of mock invoices for meaningful pagination
-const mockInvoices = Array.from({ length: 25 }, (_, i) => ({
-  id: `inv_${i + 1}`,
-  amount: Math.floor(Math.random() * 5000) + 500,
-  clientName: `Client ${i + 1}`,
-  status: i % 3 === 0 ? 'verified' : 'pending_verification',
-  ownerId: `user_${(i % 5) + 1}`,
-}));
+// Placeholder mock database (this would normally be a real database like PostgreSQL)
+const mockInvoices = [
+  { id: 'inv_1', status: 'pending_verification', amount: 1000, clientName: 'Alice Corp', ownerId: 'user_1' },
+  { id: 'inv_2', status: 'verified', amount: 2000, clientName: 'Bob Inc', ownerId: 'user_1' },
+  { id: 'inv_3', status: 'funded', amount: 5000, clientName: 'Charlie Ltd', ownerId: 'user_2' },
+];
 
 /**
- * Get a paginated list of invoices.
+ * Get a single invoice by its ID.
+ * Performs authorization checks.
  *
- * @param {Object} params - Pagination parameters.
- * @param {number} params.page - Current page number (1-indexed).
- * @param {number} params.limit - Maximum number of records per page.
- * @returns {Object} Paginated data and metadata.
+ * @param {string} id - The unique identifier of the invoice.
+ * @param {string} userId - The unique identifier of the user (from auth middleware).
+ * @returns {Object|null} The invoice data or null if not found.
  */
-const getInvoices = ({ page = 1, limit = 10 }) => {
-  // 1. Sanitize & Validate input
-  const p = Math.max(1, parseInt(page, 10)) || 1;
-  const l = Math.min(100, Math.max(1, parseInt(limit, 10))) || 10;
+const getInvoiceById = (id, userId) => {
+  // 1. Basic validation (should also be handled by route middleware)
+  if (!id || typeof id !== 'string') {
+    throw new Error('Invalid invoice ID');
+  }
 
-  // 2. Calculate indices
-  const startIndex = (p - 1) * l;
-  const endIndex = p * l;
+  // 2. Fetch from DB
+  const invoice = mockInvoices.find((inv) => inv.id === id);
 
-  // 3. Slice the dataset
-  const results = mockInvoices.slice(startIndex, endIndex);
+  // 3. Robust Not Found handling
+  if (!invoice) {
+    return null;
+  }
 
-  // 4. Calculate pagination metadata
-  const total = mockInvoices.length;
-  const totalPages = Math.ceil(total / l);
+  // 4. Secure Authorization handling
+  // If the user is not the owner, deny access.
+  if (invoice.ownerId !== userId) {
+    const error = new Error('Forbidden');
+    error.status = 403;
+    throw error;
+  }
 
-  return {
-    invoices: results,
-    meta: {
-      total,
-      page: p,
-      limit: l,
-      totalPages,
-      hasNextPage: p < totalPages,
-      hasPreviousPage: p > 1,
-    },
-  };
+  return invoice;
 };
 
 module.exports = {
-  getInvoices,
-  mockInvoices, // Exported for unit test assertions
+  getInvoiceById,
+  mockInvoices, // Exported for testing purposes
 };
