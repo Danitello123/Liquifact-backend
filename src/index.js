@@ -25,6 +25,7 @@ const errorHandler = require('./middleware/errorHandler');
 const { callSorobanContract } = require('./services/soroban');
 const AppError = require('./errors/AppError');
 
+const app = express();
 const PORT = process.env.PORT || 3001;
 
 // In-memory storage for invoices (Issue #25).
