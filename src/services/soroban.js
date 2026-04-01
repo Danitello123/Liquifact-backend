@@ -10,6 +10,16 @@
 
 'use strict';
 
+const { CircuitBreaker } = require('../utils/circuitBreaker');
+
+/**
+ * Circuit breaker instance for Soroban API calls.
+ */
+const sorobanCircuitBreaker = new CircuitBreaker({
+  failureThreshold: 5,
+  recoveryTimeout: 15000,
+});
+
 /**
  * Retry configuration used for all Soroban contract calls.
  *
@@ -20,8 +30,8 @@
  */
 const SOROBAN_RETRY_CONFIG = {
   maxRetries: parseInt(process.env.SOROBAN_MAX_RETRIES || '3', 10),
-  baseDelay:  parseInt(process.env.SOROBAN_BASE_DELAY  || '200', 10),
-  maxDelay:   parseInt(process.env.SOROBAN_MAX_DELAY   || '5000', 10),
+  baseDelay: parseInt(process.env.SOROBAN_BASE_DELAY || '200', 10),
+  maxDelay: parseInt(process.env.SOROBAN_MAX_DELAY || '5000', 10),
 };
 
 /**
@@ -52,10 +62,10 @@ function sleep(ms) {
  * @returns {number} Delay in milliseconds.
  */
 function computeBackoff(attempt, baseDelay, maxDelay) {
-  const safeCap  = Math.min(maxDelay, 60_000);
+  const safeCap = Math.min(maxDelay, 60_000);
   const safeBase = Math.min(baseDelay, 10_000);
-  const exp      = safeBase * 2 ** attempt;
-  const jitter   = exp * 0.2 * (Math.random() * 2 - 1); // ±20%
+  const exp = safeBase * 2 ** attempt;
+  const jitter = exp * 0.2 * (Math.random() * 2 - 1); // ±20%
   return Math.min(Math.max(0, Math.round(exp + jitter)), safeCap);
 }
 

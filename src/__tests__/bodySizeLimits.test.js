@@ -91,32 +91,32 @@ function makeUrlencodedBody(targetBytes) {
 
 describe('parseSize()', () => {
   describe('valid inputs', () => {
-    it('parses bytes (no suffix)',          () => expect(parseSize('1024')).toBe(1024));
-    it('parses "b" suffix (lowercase)',     () => expect(parseSize('512b')).toBe(512));
-    it('parses "B" suffix (uppercase)',     () => expect(parseSize('512B')).toBe(512));
-    it('parses "kb" suffix',               () => expect(parseSize('1kb')).toBe(1024));
-    it('parses "KB" suffix',               () => expect(parseSize('100KB')).toBe(102400));
-    it('parses "mb" suffix',               () => expect(parseSize('1mb')).toBe(1048576));
-    it('parses "MB" suffix',               () => expect(parseSize('2MB')).toBe(2097152));
-    it('parses "gb" suffix',               () => expect(parseSize('1gb')).toBe(1073741824));
-    it('handles decimal values',           () => expect(parseSize('1.5mb')).toBe(Math.floor(1.5 * 1024 ** 2)));
-    it('handles surrounding whitespace',   () => expect(parseSize('  100kb  ')).toBe(102400));
-    it('returns 0 for "0b"',               () => expect(parseSize('0b')).toBe(0));
+    it('parses bytes (no suffix)', () => expect(parseSize('1024')).toBe(1024));
+    it('parses "b" suffix (lowercase)', () => expect(parseSize('512b')).toBe(512));
+    it('parses "B" suffix (uppercase)', () => expect(parseSize('512B')).toBe(512));
+    it('parses "kb" suffix', () => expect(parseSize('1kb')).toBe(1024));
+    it('parses "KB" suffix', () => expect(parseSize('100KB')).toBe(102400));
+    it('parses "mb" suffix', () => expect(parseSize('1mb')).toBe(1048576));
+    it('parses "MB" suffix', () => expect(parseSize('2MB')).toBe(2097152));
+    it('parses "gb" suffix', () => expect(parseSize('1gb')).toBe(1073741824));
+    it('handles decimal values', () => expect(parseSize('1.5mb')).toBe(Math.floor(1.5 * 1024 ** 2)));
+    it('handles surrounding whitespace', () => expect(parseSize('  100kb  ')).toBe(102400));
+    it('returns 0 for "0b"', () => expect(parseSize('0b')).toBe(0));
   });
 
   describe('TypeError', () => {
-    it('throws for empty string',    () => expect(() => parseSize('')).toThrow(TypeError));
+    it('throws for empty string', () => expect(() => parseSize('')).toThrow(TypeError));
     it('throws for whitespace-only', () => expect(() => parseSize('   ')).toThrow(TypeError));
-    it('throws for number input',    () => expect(() => parseSize(1024)).toThrow(TypeError));
-    it('throws for null',            () => expect(() => parseSize(null)).toThrow(TypeError));
-    it('throws for undefined',       () => expect(() => parseSize(undefined)).toThrow(TypeError));
-    it('throws for object',          () => expect(() => parseSize({ size: '1kb' })).toThrow(TypeError));
+    it('throws for number input', () => expect(() => parseSize(1024)).toThrow(TypeError));
+    it('throws for null', () => expect(() => parseSize(null)).toThrow(TypeError));
+    it('throws for undefined', () => expect(() => parseSize(undefined)).toThrow(TypeError));
+    it('throws for object', () => expect(() => parseSize({ size: '1kb' })).toThrow(TypeError));
   });
 
   describe('RangeError', () => {
     it('throws for unknown unit "tb"', () => expect(() => parseSize('1tb')).toThrow(RangeError));
     it('throws for non-numeric value', () => expect(() => parseSize('abckb')).toThrow(RangeError));
-    it('throws for negative value',    () => expect(() => parseSize('-1kb')).toThrow(RangeError));
+    it('throws for negative value', () => expect(() => parseSize('-1kb')).toThrow(RangeError));
   });
 });
 
@@ -171,7 +171,7 @@ describe('jsonBodyLimit()', () => {
     const res = await request(app)
       .post('/test').set('Content-Type', 'application/json').send(makeJsonBody(2048));
     expect(res.body).toMatchObject({
-      error:   'Payload Too Large',
+      error: 'Payload Too Large',
       message: expect.stringContaining('maximum allowed size'),
     });
   });
@@ -247,7 +247,7 @@ describe('urlencodedBodyLimit()', () => {
       .set('Content-Type', 'application/x-www-form-urlencoded')
       .send(makeUrlencodedBody(2048));
     expect(res.body).toMatchObject({
-      error:   'Payload Too Large',
+      error: 'Payload Too Large',
       message: expect.stringContaining('maximum allowed size'),
     });
   });
@@ -271,7 +271,7 @@ describe('invoiceBodyLimit()', () => {
 
   beforeAll(() => {
     appDefault = buildApp(invoiceBodyLimit());
-    appCustom  = buildApp(invoiceBodyLimit('2kb'));
+    appCustom = buildApp(invoiceBodyLimit('2kb'));
   });
 
   it('returns a handler array', () => {
@@ -359,11 +359,11 @@ describe('parseAllowedOrigins()', () => {
 });
 
 describe('isCorsOriginRejectedError()', () => {
-  it('returns true for flagged error',  () => expect(isCorsOriginRejectedError({ isCorsOriginRejected: true })).toBe(true));
-  it('returns false for plain error',   () => expect(isCorsOriginRejectedError(new Error('x'))).toBe(false));
-  it('returns false for null',          () => expect(isCorsOriginRejectedError(null)).toBe(false));
-  it('returns false for undefined',     () => expect(isCorsOriginRejectedError(undefined)).toBe(false));
-  it('returns false when flag is false',() => expect(isCorsOriginRejectedError({ isCorsOriginRejected: false })).toBe(false));
+  it('returns true for flagged error', () => expect(isCorsOriginRejectedError({ isCorsOriginRejected: true })).toBe(true));
+  it('returns false for plain error', () => expect(isCorsOriginRejectedError(new Error('x'))).toBe(false));
+  it('returns false for null', () => expect(isCorsOriginRejectedError(null)).toBe(false));
+  it('returns false for undefined', () => expect(isCorsOriginRejectedError(undefined)).toBe(false));
+  it('returns false when flag is false', () => expect(isCorsOriginRejectedError({ isCorsOriginRejected: false })).toBe(false));
 });
 
 describe('createCorsOptions()', () => {
@@ -456,13 +456,13 @@ describe('computeBackoff()', () => {
 });
 
 describe('isRetryable()', () => {
-  it('returns false for null',                () => expect(isRetryable(null)).toBe(false));
-  it('returns false for undefined',           () => expect(isRetryable(undefined)).toBe(false));
-  it('returns true for ECONNRESET',           () => expect(isRetryable({ code: 'ECONNRESET' })).toBe(true));
-  it('returns true for ETIMEDOUT',            () => expect(isRetryable({ code: 'ETIMEDOUT' })).toBe(true));
-  it('returns false for 400',                 () => expect(isRetryable({ status: 400 })).toBe(false));
-  it('returns false for 404',                 () => expect(isRetryable({ status: 404 })).toBe(false));
-  it('returns false for 500',                 () => expect(isRetryable({ status: 500 })).toBe(false));
+  it('returns false for null', () => expect(isRetryable(null)).toBe(false));
+  it('returns false for undefined', () => expect(isRetryable(undefined)).toBe(false));
+  it('returns true for ECONNRESET', () => expect(isRetryable({ code: 'ECONNRESET' })).toBe(true));
+  it('returns true for ETIMEDOUT', () => expect(isRetryable({ code: 'ETIMEDOUT' })).toBe(true));
+  it('returns false for 400', () => expect(isRetryable({ status: 400 })).toBe(false));
+  it('returns false for 404', () => expect(isRetryable({ status: 404 })).toBe(false));
+  it('returns false for 500', () => expect(isRetryable({ status: 500 })).toBe(false));
   it.each([...RETRYABLE_STATUS_CODES])('returns true for status %i', (code) => {
     expect(isRetryable({ status: code })).toBe(true);
   });
@@ -583,7 +583,7 @@ describe('createApp() integration', () => {
 
   beforeAll(() => {
     process.env.CORS_ALLOWED_ORIGINS = 'http://localhost:3000';
-    process.env.NODE_ENV             = 'test';
+    process.env.NODE_ENV = 'test';
     app = createApp();
   });
 

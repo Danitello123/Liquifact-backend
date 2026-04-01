@@ -213,7 +213,7 @@ describe('LiquiFact API', () => {
     });
 
     it('error handler - returns 500 on unexpected error', async () => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => { });
       const response = await request(app).get('/error-test-trigger');
       expect(response.status).toBe(404); // Kept as 404 from incoming branch config
       consoleSpy.mockRestore();
