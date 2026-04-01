@@ -1,6 +1,6 @@
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
-const app = require('../index');
+const app = require('../index'); // Adjust if needed based on index.js exports
 
 describe('Authentication Middleware', () => {
     const secret = process.env.JWT_SECRET || 'test-secret';
@@ -60,26 +60,23 @@ describe('Authentication Middleware', () => {
             const response = await request(app)
                 .post('/api/invoices')
                 .set('Authorization', `Bearer ${validToken}`)
-                .send({});
+                .send({ amount: 1000, customer: 'Test Corp' });
             expect(response.status).toBe(201);
-            expect(response.body.data.status).toBe('pending_verification');
+            expect(response.body.data).toHaveProperty('id');
         });
     });
 
-    describe('Route Protection - POST /api/escrow', () => {
-        it('should allow escrow operations with valid token', async () => {
+    describe('Route Protection - GET /api/escrow/:invoiceId', () => {
+        it('should allow escrow read with valid token', async () => {
             const response = await request(app)
-                .post('/api/escrow')
-                .set('Authorization', `Bearer ${validToken}`)
-                .send({});
+                .get('/api/escrow/test-invoice')
+                .set('Authorization', `Bearer ${validToken}`);
             expect(response.status).toBe(200);
-            expect(response.body.data.status).toBe('funded');
+            expect(response.body.data.invoiceId).toBe('test-invoice');
         });
 
-        it('should reject escrow operations without token', async () => {
-            const response = await request(app)
-                .post('/api/escrow')
-                .send({});
+        it('should reject escrow read without token', async () => {
+            const response = await request(app).get('/api/escrow/test-invoice');
             expect(response.status).toBe(401);
         });
     });

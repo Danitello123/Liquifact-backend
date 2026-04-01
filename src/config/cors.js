@@ -1,114 +1,181 @@
-const DEVELOPMENT_FALLBACK_ORIGINS = [
+/**
+ * @fileoverview CORS allowlist parsing and policy for the LiquiFact API.
+ *
+ * Reads trusted origins from the `CORS_ALLOWED_ORIGINS` environment variable
+ * (comma-separated list of exact origins) and builds an `options` object
+ * compatible with the `cors` npm package.
+ *
+ * Behaviour summary:
+ * - Requests with **no Origin header** (curl, Postman, server-to-server) are
+ * always allowed — the `origin` callback receives `undefined` and passes.
+ * - Requests from an **allowed origin** receive normal CORS response headers.
+ * - Requests from a **disallowed origin** receive a 403 Forbidden response
+ * via a dedicated `Error` whose `.isCorsOriginRejected` flag is `true`.
+ * - In `NODE_ENV=development`, when `CORS_ALLOWED_ORIGINS` is not set, a set
+ * of common local development origins is permitted automatically.
+ * - In all other environments, when `CORS_ALLOWED_ORIGINS` is not set, every
+ * browser origin is denied.
+ *
+ * @module config/cors
+ */
+
+'use strict';
+
+/**
+ * Fixed rejection message used for all blocked-origin CORS errors.
+ *
+ * @constant {string}
+ */
+const CORS_REJECTION_MESSAGE = 'CORS policy: origin is not allowed.';
+
+/** @type {string[]} Origins allowed when no env var is set during development. */
+const DEV_DEFAULT_ORIGINS = [
   'http://localhost:3000',
-  'http://127.0.0.1:3000',
+  'http://localhost:3001',
   'http://localhost:5173',
+  'http://127.0.0.1:3000',
   'http://127.0.0.1:5173',
 ];
 
-const CORS_REJECTION_MESSAGE = 'Origin not allowed by CORS';
-
 /**
- * Parses a comma-separated origin allowlist into normalized exact-match origins.
+ * Returns the hard-coded development fallback origin list.
  *
- * @param {string | undefined} value Raw environment variable value.
- * @returns {string[]} Normalized list of allowed origins.
- */
-function parseAllowedOrigins(value) {
-  if (!value) {
-    return [];
-  }
-
-  return value
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-}
-
-/**
- * Returns the built-in localhost allowlist used when development mode has no
- * explicit CORS configuration.
- *
- * @returns {string[]} Local development origins.
+ * @returns {string[]} Array of development-safe origins.
  */
 function getDevelopmentFallbackOrigins() {
-  return [...DEVELOPMENT_FALLBACK_ORIGINS];
+  return DEV_DEFAULT_ORIGINS;
 }
 
 /**
- * Resolves the effective origin allowlist for the current environment.
+ * Parses `CORS_ALLOWED_ORIGINS` into a trimmed, de-duplicated array of origin
+ * strings.  Returns `[]` when the value is absent or blank.
  *
- * @param {NodeJS.ProcessEnv} env Environment variables to evaluate.
- * @returns {string[]} Effective exact-match allowlist.
+ * @param {string|undefined} raw - Raw value of the environment variable.
+ * @returns {string[]} Array of allowed origins (empty when unset).
  */
-function getAllowedOriginsFromEnv(env = process.env) {
-  const configuredOrigins = parseAllowedOrigins(env.CORS_ALLOWED_ORIGINS);
+function parseAllowedOrigins(raw) {
+  if (!raw || raw.trim() === '') {
+    return null;
+  }
+  return [
+    ...new Set(
+      raw
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean)
+    ),
+  ];
+}
 
-  if (configuredOrigins.length > 0) {
-    return configuredOrigins;
+/**
+ * Resolves the effective origin allowlist from the given environment object.
+ *
+ * @returns {string[]|null} Allowlist to enforce, or `null` meaning "deny all
+ * browser origins" (production with no env var set).
+ */
+function resolveAllowlist() {
+  const fromEnv = parseAllowedOrigins(process.env.CORS_ALLOWED_ORIGINS);
+  if (fromEnv !== null) {
+    return fromEnv;
   }
 
-  if (env.NODE_ENV === 'development') {
-    return getDevelopmentFallbackOrigins();
+  if (process.env.NODE_ENV === 'development') {
+    return DEV_DEFAULT_ORIGINS;
   }
 
-  return [];
+/**
+ * Resolves the effective origin allowlist given the current environment.
+ *
+ * @param {Object} [env=process.env] - Environment variable map.
+ * @returns {string[]} Allowlist to enforce.
+ */
+function resolveAllowlist(env) {
+  return getAllowedOriginsFromEnv(env);
 }
 
 /**
- * Creates the explicit error object used to reject a blocked browser origin.
+ * Sentinel error thrown when an incoming `Origin` is not on the allowlist.
+ * The `isCorsOriginRejected` flag lets downstream error handlers identify it
+ * without `instanceof` checks across module boundaries.
  *
- * @returns {Error & { status: number }} CORS rejection error.
+ * @param {string} [_origin] - The rejected origin value (unused; message is fixed).
+ * @returns {Error} Annotated error instance.
  */
-function createCorsRejectionError() {
-  const error = new Error(CORS_REJECTION_MESSAGE);
-  error.status = 403;
-  return error;
+function createCorsRejectionError(_origin) {
+  const err = new Error(CORS_REJECTION_MESSAGE);
+  err.isCorsOriginRejected = true;
+  err.status = 403;
+  return err;
 }
 
 /**
- * Determines whether the supplied error is the dedicated CORS rejection error.
+ * Returns `true` if `err` is the dedicated blocked-origin CORS error produced
+ * by {@link createCorsRejectionError}.
  *
- * @param {Error | undefined} error Error raised during request handling.
- * @returns {boolean} True when the error is a blocked-origin CORS error.
+ * @param {unknown} err - Value to test.
+ * @returns {boolean}
  */
-function isCorsOriginRejectedError(error) {
-  return Boolean(
-    error &&
-    error.status === 403 &&
-    error.message === CORS_REJECTION_MESSAGE
-  );
+function isCorsOriginRejectedError(err) {
+  return err !== null && err !== undefined && err.isCorsOriginRejected === true;
 }
 
 /**
- * Builds Express CORS options using an environment-driven exact-match allowlist.
+ * Builds the options object for the `cors` middleware package.
  *
- * Requests without an Origin header remain allowed so non-browser clients and
- * same-origin traffic are not blocked by CORS policy.
+ * The `origin` callback implements exact-match checking against the resolved
+ * allowlist.  It calls `callback(null, true)` to approve an origin, and
+ * `callback(err)` with the rejection error to deny it.
  *
- * @param {NodeJS.ProcessEnv} env Environment variables to evaluate.
- * @returns {{ origin: (origin: string | undefined, callback: Function) => void }} CORS options.
+ * @param {Object} [env=process.env] - Environment variable map (for testing).
+ * @returns {import('cors').CorsOptions} Options ready to pass to `cors()`.
+ *
+ * @example
+ * const cors = require('cors');
+ * const { createCorsOptions } = require('./config/cors');
+ * app.use(cors(createCorsOptions()));
  */
-function createCorsOptions(env = process.env) {
-  const allowedOrigins = getAllowedOriginsFromEnv(env);
-  const allowedOriginsSet = new Set(allowedOrigins);
+function createCorsOptions(env) {
+  const allowlist = getAllowedOriginsFromEnv(env || process.env);
 
   return {
+    /**
+     * Validates request origin against the allowlist.
+     *
+     * @param {string|undefined} origin - The request origin header value.
+     * @param {Function} callback - CORS callback (err, allow).
+     * @returns {void}
+     */
     origin(origin, callback) {
-      if (!origin || allowedOriginsSet.has(origin)) {
+      // Non-browser requests (no Origin header) are always allowed.
+      if (origin === undefined) {
         return callback(null, true);
       }
 
-      return callback(createCorsRejectionError());
+      // No allowlist configured → deny all browser origins.
+      if (allowlist.length === 0) {
+        return callback(createCorsRejectionError(origin));
+      }
+
+      if (allowlist.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(createCorsRejectionError(origin));
     },
+    // Expose the standard headers clients need.
+    optionsSuccessStatus: 204,
   };
 }
 
 module.exports = {
   CORS_REJECTION_MESSAGE,
+  DEV_DEFAULT_ORIGINS,
   createCorsOptions,
   createCorsRejectionError,
   getAllowedOriginsFromEnv,
   getDevelopmentFallbackOrigins,
   isCorsOriginRejectedError,
   parseAllowedOrigins,
+  resolveAllowlist,
+  DEV_DEFAULT_ORIGINS,
 };
