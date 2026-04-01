@@ -1,7 +1,4 @@
 TN:
-<<<<<<< HEAD
-SF:src\app.js
-FN:11,(anonymous_0)
 FN:19,(anonymous_1)
 FN:32,(anonymous_2)
 FN:36,(anonymous_3)
@@ -80,7 +77,6 @@ BRDA:33,1,0,1
 BRDA:33,2,0,2
 BRF:3
 BRH:3
-=======
 SF:src/services/soroban.js
 FN:9,isTransientError
 FN:19,(anonymous_1)
@@ -148,5 +144,4 @@ BRDA:51,6,0,21
 BRDA:51,6,1,18
 BRF:9
 BRH:9
->>>>>>> main
 end_of_record

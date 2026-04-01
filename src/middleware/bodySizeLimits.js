@@ -100,7 +100,8 @@ function jsonBodyLimit(limit) {
 
   return [
     /**
-     * Content-Length pre-flight guard.
+     * Content-Length pre-flight guard — runs before the body parser so that
+     * oversized requests are rejected immediately without reading the body.
      *
      * @param {import('express').Request}      req
      * @param {import('express').Response}     res
@@ -133,7 +134,8 @@ function urlencodedBodyLimit(limit) {
 
   return [
     /**
-     * Content-Length pre-flight guard.
+     * Content-Length pre-flight guard — runs before the body parser so that
+     * oversized requests are rejected immediately without reading the body.
      *
      * @param {import('express').Request}      req
      * @param {import('express').Response}     res

@@ -2,14 +2,14 @@
  * @fileoverview Express application factory for the LiquiFact API.
  *
  * Wires together all middleware and routes in the correct order:
- *   1. CORS policy (environment-driven allowlist, 403 on blocked origins)
- *   2. Request body-size guardrails (100 KB global JSON, 512 KB invoice limit)
- *   3. URL-encoded body parser (50 KB limit)
- *   4. Application routes (health, api-info, invoices, escrow)
- *   5. 404 catch-all
- *   6. CORS error handler  → 403 JSON
- *   7. Payload-too-large handler → 413 JSON
- *   8. Generic internal-error handler → 500 JSON
+ * 1. CORS policy (environment-driven allowlist, 403 on blocked origins)
+ * 2. Request body-size guardrails (100 KB global JSON, 512 KB invoice limit)
+ * 3. URL-encoded body parser (50 KB limit)
+ * 4. Application routes (health, api-info, invoices, escrow)
+ * 5. 404 catch-all
+ * 6. CORS error handler  → 403 JSON
+ * 7. Payload-too-large handler → 413 JSON
+ * 8. Generic internal-error handler → 500 JSON
  *
  * @module app
  */
@@ -18,17 +18,95 @@
 
 const express = require('express');
 const cors = require('cors');
+const invoiceRoutes = require('./routes/invoiceRoutes');
+const { callSorobanContract } = require('./services/soroban');
+
+
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'liquifact-api',
+    version: '0.1.0',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// API info
+app.get('/api', (req, res) => {
+  res.json({
+    name: 'LiquiFact API',
+    description: 'Global Invoice Liquidity Network on Stellar',
+    endpoints: {
+      health: 'GET /health',
+      invoices: 'GET /api/invoices/:id', // Updated to show new endpoint
+      escrow: 'GET /api/escrow/:invoiceId',
+    },
+  });
+});
+
+app.post('/api/invoices', (req, res) => {
+  res.status(201).json({
+    data: { id: 'placeholder', status: 'pending_verification' },
+    message: 'Invoice upload will be implemented with verification and tokenization.',
+  });
+});
+
+
+// Register routes
+app.use('/api/invoices', invoiceRoutes);
+
+// Placeholder for Escrow (wired to Soroban)
+app.get('/api/escrow/:invoiceId', async (req, res) => {
+  const { invoiceId } = req.params;
+
+  try {
+    // Simulated remote contract call
+    const operation = async () => {
+      return { invoiceId, status: 'not_found', fundedAmount: 0 };
+    };
+
+    const data = await callSorobanContract(operation);
+    
+    res.json({
+      data,
+      message: 'Escrow state read from Soroban contract via robust integration wrapper.',
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Error fetching escrow state' });
+  }
+});
+
+
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found', path: req.path });
+});
+
+app.use((err, req, res, _next) => {
+  // Simple error handler for non-403 errors
+  const status = err.status || 500;
+  res.status(status).json({
+    error: status === 500 ? 'Internal Server Error' : err.message,
+    ...(status === 500 && { details: err.message }),
+  });
+});
+
+module.exports = app;
 require('dotenv').config();
 
-const { callSorobanContract } = require('./services/soroban');
+const { callSorobanContract }               = require('./services/soroban');
+const invoiceService                        = require('./services/invoice.service');
 const { createCorsOptions, isCorsOriginRejectedError } = require('./config/cors');
-const { sanitizeInput } = require('./middleware/sanitizeInput');
-const { validateInvoiceQueryParams } = require('./utils/validators');
+const { validateInvoiceQueryParams }                  = require('./utils/validators');
 const {
   invoiceBodyLimit,
   payloadTooLargeHandler,
 } = require('./middleware/bodySizeLimits');
-const responseHelper = require('./utils/responseHelper');
 
 /**
  * Returns a 403 JSON response only for the dedicated blocked-origin CORS error.
@@ -87,14 +165,18 @@ function handleInternalError(err, req, res, _next) {
  * @returns {import('express').Express} Configured Express application.
  */
 function createApp() {
+  const isTest = process.env.NODE_ENV === 'test';
+  if (isTest) { /* eslint-disable-line no-unused-vars */ }
   const app = express();
 
   // ── 1. CORS ──────────────────────────────────────────────────────────────
-  // Must come before body parsers so preflight OPTIONS requests are handled
-  // before any payload is read.
   app.use(cors(createCorsOptions()));
-  app.use(express.json());
-  app.use(sanitizeInput);
+
+  // ── 2 & 3. Body-size guardrails ──────────────────────────────────────────
+  app.use(jsonBodyLimit());
+  app.use(urlencodedBodyLimit());
+
+  // ── 4. Routes ────────────────────────────────────────────────────────────
 
   // Health check
   app.get('/health', (req, res) => {
@@ -120,42 +202,16 @@ function createApp() {
   });
 
   // Invoices — GET (list)
-  app.get('/api/invoices', async (req, res, next) => {
-    try {
-      const validation = validateInvoiceQueryParams(req.query);
-      if (!validation.isValid) {
-        res.status(400).json({ errors: validation.errors });
-        return;
-      }
-
-      let invoiceService;
-      try {
-        invoiceService = require('./services/invoice.service');
-      } catch {
-        res.json({
-          data: [],
-          message: 'Invoices retrieved successfully.',
-        });
-        return;
-      }
-
-      if (!invoiceService || typeof invoiceService.getInvoices !== 'function') {
-        res.json({
-          data: [],
-          message: 'Invoices retrieved successfully.',
-        });
-        return;
-      }
-
-      const data = await invoiceService.getInvoices(validation.validatedParams);
-      res.json({
-        data,
-        message: 'Invoices retrieved successfully.',
-      });
-      return;
-    } catch (error) {
-      next(error);
+  app.get('/api/invoices', async (req, res) => {
+    const { isValid, errors, validatedParams } = validateInvoiceQueryParams(req.query);
+    if (!isValid) {
+      return res.status(400).json({ errors });
     }
+    const invoices = await invoiceService.getInvoices(validatedParams);
+    res.json({
+      data:    invoices,
+      message: 'Invoices retrieved successfully.',
+    });
   });
 
   // Invoices — POST (create) with strict 512 KB body limit
@@ -170,11 +226,7 @@ function createApp() {
   app.get('/api/escrow/:invoiceId', async (req, res) => {
     const { invoiceId } = req.params;
     try {
-      /**
-       * Simulated remote contract call.
-       *
-       * @returns {Promise<object>} Simulated escrow payload.
-       */
+      // Simulated remote contract call
       const operation = async () => {
         return { invoiceId, status: 'not_found', fundedAmount: 0 };
       };
@@ -188,7 +240,14 @@ function createApp() {
     }
   });
 
-  // Developer test route — forces a 500 to exercise the error handler
+  /**
+   * Simulated error route for testing error handling middleware.
+   *
+   * @param {import('express').Request} req Express request.
+   * @param {import('express').Response} res Express response.
+   * @param {import('express').NextFunction} next Express next callback.
+   * @returns {void}
+   */
   app.get('/error', (req, res, next) => {
     next(new Error('Simulated server error'));
   });
@@ -207,9 +266,9 @@ function createApp() {
   });
 
   // ── 6 – 8. Error handlers (order matters) ────────────────────────────────
-  app.use(handleCorsError);         // 403 for blocked CORS origins
-  app.use(payloadTooLargeHandler);  // 413 for oversized request bodies
-  app.use(handleInternalError);     // 500 for everything else
+  app.use(handleCorsError);
+  app.use(payloadTooLargeHandler);
+  app.use(handleInternalError);
 
   return app;
 }

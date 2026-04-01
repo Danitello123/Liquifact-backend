@@ -5,7 +5,6 @@
  */
 
 const jwt = require('jsonwebtoken');
-const { error: buildErrorResponse } = require('../utils/responseHelper');
 
 /**
  * Middleware function to enforce authentication for protected routes.
@@ -18,27 +17,16 @@ const { error: buildErrorResponse } = require('../utils/responseHelper');
  * @returns {void}
  */
 const authenticateToken = (req, res, next) => {
-  /**
-   * Sends a standardized unauthorized response.
-   *
-   * @param {string} message - Unauthorized message.
-   * @returns {import('express').Response} Express response.
-   */
-  const sendUnauthorized = (message) => {
-    res.header('Content-Type', 'application/problem+json');
-    return res.status(401).json(buildErrorResponse(message, 'UNAUTHORIZED', null));
-  };
-
   const authHeader = req.headers['authorization'];
   
   if (!authHeader) {
-    return sendUnauthorized('Authentication token is required');
+    return res.status(401).json({ error: 'Authentication token is required' });
   }
 
   const tokenParts = authHeader.split(' ');
   
   if (tokenParts.length !== 2 || tokenParts[0] !== 'Bearer') {
-    return sendUnauthorized('Invalid Authorization header format. Expected "Bearer <token>"');
+    return res.status(401).json({ error: 'Invalid Authorization header format. Expected "Bearer <token>"' });
   }
 
   const token = tokenParts[1];
@@ -47,9 +35,9 @@ const authenticateToken = (req, res, next) => {
   jwt.verify(token, secret, (err, decoded) => {
     if (err) {
       if (err.name === 'TokenExpiredError') {
-        return sendUnauthorized('Token has expired');
+        return res.status(401).json({ error: 'Token has expired' });
       }
-      return sendUnauthorized('Invalid token');
+      return res.status(401).json({ error: 'Invalid token' });
     }
     
     // Attach user info to the request pattern
