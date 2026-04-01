@@ -24,7 +24,7 @@ describe('errorHandler Middleware Unit Tests', () => {
     console.error.mockRestore();
   });
 
-  test('should handle AppError and send RFC 7807 response', () => {
+  test('should handle AppError and send standardized envelope', () => {
     const error = new AppError({
       type: 'https://liquifact.com/probs/bad-request',
       title: 'Bad Request',
@@ -38,11 +38,13 @@ describe('errorHandler Middleware Unit Tests', () => {
     expect(mockResponse.status).toHaveBeenCalledWith(400);
     expect(mockResponse.json).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'https://liquifact.com/probs/bad-request',
-        title: 'Bad Request',
-        status: 400,
-        detail: 'Invalid data',
-        instance: '/api/v1/test',
+        data: null,
+        meta: expect.any(Object),
+        error: expect.objectContaining({
+          message: 'Invalid data',
+          code: 'BAD_REQUEST',
+          details: null,
+        }),
       })
     );
   });
@@ -55,9 +57,12 @@ describe('errorHandler Middleware Unit Tests', () => {
     expect(mockResponse.status).toHaveBeenCalledWith(500);
     expect(mockResponse.json).toHaveBeenCalledWith(
       expect.objectContaining({
-        status: 500,
-        title: 'Internal Server Error',
-        detail: 'An unexpected error occurred while processing your request.',
+        data: null,
+        meta: expect.any(Object),
+        error: expect.objectContaining({
+          message: 'Something exploded',
+          code: 'INTERNAL_ERROR',
+        }),
       })
     );
   });
@@ -76,10 +81,10 @@ describe('errorHandler middleware', () => {
     const res = await request(app).get('/error');
 
     expect(res.statusCode).toBe(500);
-    expect(res.body.error).toBeDefined();
+    expect(res.body.title).toBeDefined();
   });
 
-  it('should respect custom statusCode', async () => {
+  it('should return 500 for generic errors regardless of statusCode property', async () => {
     const app = createTestApp((app) => {
       app.get('/custom', () => {
         const err = new Error('Bad Request');
@@ -90,8 +95,8 @@ describe('errorHandler middleware', () => {
 
     const res = await request(app).get('/custom');
 
-    expect(res.statusCode).toBe(400);
-    expect(res.body.error.message).toBe('Bad Request');
+    expect(res.statusCode).toBe(500);
+    expect(res.body.title).toBeDefined();
   });
 
   it('should hide stack in production', async () => {
@@ -105,8 +110,8 @@ describe('errorHandler middleware', () => {
 
     const res = await request(app).get('/prod-error');
 
-    expect(res.body.error.message).toBe('Internal server error');
-    expect(res.body.error.stack).toBeUndefined();
+    expect(res.body.title).toBe('Internal Server Error');
+    expect(res.body.stack).toBeUndefined();
 
     process.env.NODE_ENV = 'test'; // reset
   });

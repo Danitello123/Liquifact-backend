@@ -4,12 +4,15 @@
  */
 class AppError extends Error {
   /**
+  * Creates a new AppError instance.
+  *
    * @param {Object} params
    * @param {string} params.type - A URI reference [RFC3986] that identifies the problem type.
    * @param {string} params.title - A short, human-readable summary of the problem type.
    * @param {number} params.status - The HTTP status code (e.g., 400, 404, 500).
    * @param {string} params.detail - A human-readable explanation specific to this occurrence of the problem.
    * @param {string} [params.instance] - A URI reference that identifies the specific occurrence of the problem.
+   * @returns {AppError}
    */
   constructor({ type, title, status, detail, instance }) {
     super(title);

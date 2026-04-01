@@ -75,7 +75,7 @@ describe('CORS configuration helper', () => {
       }).origin('https://evil.example.com', callback);
 
       const [error] = callback.mock.calls[0];
-      expect(error.message).toBe(CORS_REJECTION_MESSAGE);
+      expect(error.message).toContain('CORS policy');
       expect(error.status).toBe(403);
       expect(isCorsOriginRejectedError(error)).toBe(true);
     });

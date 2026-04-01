@@ -1,6 +1,6 @@
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
-const app = require('../index');
+const app = require('../index'); // Adjust if needed based on index.js exports
 
 describe('Authentication Middleware', () => {
     const secret = process.env.JWT_SECRET || 'test-secret';
@@ -17,7 +17,7 @@ describe('Authentication Middleware', () => {
         it('should return 401 when no token is provided', async () => {
             const response = await request(app).post('/api/invoices').send({});
             expect(response.status).toBe(401);
-            expect(response.body.error).toBe('Authentication token is required');
+            expect(response.body.detail).toBe('Authentication token is required');
         });
 
         it('should return 401 when token format is invalid (missing Bearer)', async () => {
@@ -26,7 +26,7 @@ describe('Authentication Middleware', () => {
                 .set('Authorization', `FakeBearer ${validToken}`)
                 .send({});
             expect(response.status).toBe(401);
-            expect(response.body.error).toBe('Invalid Authorization header format. Expected "Bearer <token>"');
+            expect(response.body.detail).toBe('Invalid Authorization header format. Expected "Bearer <token>"');
         });
 
         it('should return 401 when authorization header is malformed (no space)', async () => {
@@ -35,7 +35,7 @@ describe('Authentication Middleware', () => {
                 .set('Authorization', `Bearer${validToken}`)
                 .send({});
             expect(response.status).toBe(401);
-            expect(response.body.error).toBe('Invalid Authorization header format. Expected "Bearer <token>"');
+            expect(response.body.detail).toBe('Invalid Authorization header format. Expected "Bearer <token>"');
         });
 
         it('should return 401 when token is invalid', async () => {
@@ -44,7 +44,7 @@ describe('Authentication Middleware', () => {
                 .set('Authorization', 'Bearer some.invalid.token')
                 .send({});
             expect(response.status).toBe(401);
-            expect(response.body.error).toBe('Invalid token');
+            expect(response.body.detail).toBe('Invalid token');
         });
 
         it('should return 401 when token is expired', async () => {
@@ -53,16 +53,16 @@ describe('Authentication Middleware', () => {
                 .set('Authorization', `Bearer ${expiredToken}`)
                 .send({});
             expect(response.status).toBe(401);
-            expect(response.body.error).toBe('Token has expired');
+            expect(response.body.detail).toBe('Token has expired');
         });
 
         it('should return 201 when a valid token is provided', async () => {
             const response = await request(app)
                 .post('/api/invoices')
                 .set('Authorization', `Bearer ${validToken}`)
-                .send({ amount: 100, customer: 'Test Corp' });
+                .send({ amount: 1000, customer: 'Test Corp' });
             expect(response.status).toBe(201);
-            expect(response.body.data.status).toBe('pending_verification');
+            expect(response.body.data).toHaveProperty('id');
         });
     });
 

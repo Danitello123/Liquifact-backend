@@ -5,6 +5,7 @@
  */
 
 const jwt = require('jsonwebtoken');
+const AppError = require('../errors/AppError');
 
 /**
  * Middleware function to enforce authentication for protected routes.
@@ -20,13 +21,25 @@ const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   
   if (!authHeader) {
-    return res.status(401).json({ error: 'Authentication token is required' });
+    return next(new AppError({
+      type: 'https://liquifact.com/probs/unauthorized',
+      title: 'Unauthorized',
+      status: 401,
+      detail: 'Authentication token is required',
+      instance: req.originalUrl,
+    }));
   }
 
   const tokenParts = authHeader.split(' ');
   
   if (tokenParts.length !== 2 || tokenParts[0] !== 'Bearer') {
-    return res.status(401).json({ error: 'Invalid Authorization header format. Expected "Bearer <token>"' });
+    return next(new AppError({
+      type: 'https://liquifact.com/probs/unauthorized',
+      title: 'Unauthorized',
+      status: 401,
+      detail: 'Invalid Authorization header format. Expected "Bearer <token>"',
+      instance: req.originalUrl,
+    }));
   }
 
   const token = tokenParts[1];
@@ -35,9 +48,21 @@ const authenticateToken = (req, res, next) => {
   jwt.verify(token, secret, (err, decoded) => {
     if (err) {
       if (err.name === 'TokenExpiredError') {
-        return res.status(401).json({ error: 'Token has expired' });
+        return next(new AppError({
+          type: 'https://liquifact.com/probs/token-expired',
+          title: 'Token Expired',
+          status: 401,
+          detail: 'Token has expired',
+          instance: req.originalUrl,
+        }));
       }
-      return res.status(401).json({ error: 'Invalid token' });
+      return next(new AppError({
+        type: 'https://liquifact.com/probs/invalid-token',
+        title: 'Invalid Token',
+        status: 401,
+        detail: 'Invalid token',
+        instance: req.originalUrl,
+      }));
     }
     
     // Attach user info to the request pattern

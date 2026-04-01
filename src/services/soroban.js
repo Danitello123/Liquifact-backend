@@ -10,6 +10,16 @@
 
 'use strict';
 
+const { CircuitBreaker } = require('../utils/circuitBreaker');
+
+/**
+ * Circuit breaker instance for Soroban API calls.
+ */
+const sorobanCircuitBreaker = new CircuitBreaker({
+  failureThreshold: 5,
+  recoveryTimeout: 15000,
+});
+
 /**
  * Retry configuration used for all Soroban contract calls.
  *
@@ -20,8 +30,8 @@
  */
 const SOROBAN_RETRY_CONFIG = {
   maxRetries: parseInt(process.env.SOROBAN_MAX_RETRIES || '3', 10),
-  baseDelay:  parseInt(process.env.SOROBAN_BASE_DELAY  || '200', 10),
-  maxDelay:   parseInt(process.env.SOROBAN_MAX_DELAY   || '5000', 10),
+  baseDelay: parseInt(process.env.SOROBAN_BASE_DELAY || '200', 10),
+  maxDelay: parseInt(process.env.SOROBAN_MAX_DELAY || '5000', 10),
 };
 
 /**
@@ -52,11 +62,35 @@ function sleep(ms) {
  * @returns {number} Delay in milliseconds.
  */
 function computeBackoff(attempt, baseDelay, maxDelay) {
-  const safeCap  = Math.min(maxDelay, 60_000);
+  const safeCap = Math.min(maxDelay, 60_000);
   const safeBase = Math.min(baseDelay, 10_000);
-  const exp      = safeBase * 2 ** attempt;
-  const jitter   = exp * 0.2 * (Math.random() * 2 - 1); // ±20%
+  const exp = safeBase * 2 ** attempt;
+  const jitter = exp * 0.2 * (Math.random() * 2 - 1); // ±20%
   return Math.min(Math.max(0, Math.round(exp + jitter)), safeCap);
+}
+
+/**
+ * Determines whether an error is transient based on its message string.
+ *
+ * Checks for common transient error indicators: timeouts, rate-limits, and
+ * 5xx / 429 HTTP status codes mentioned in the message.
+ *
+ * @param {unknown} err - Error to inspect.
+ * @returns {boolean} `true` when the error message signals a transient fault.
+ */
+function isTransientError(err) {
+  if (!err || !err.message) { return false; }
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes('timeout') ||
+    msg.includes('rate limit') ||
+    msg.includes('429') ||
+    msg.includes('502') ||
+    msg.includes('503') ||
+    msg.includes('504') ||
+    msg.includes('service unavailable') ||
+    msg.includes('bad gateway')
+  );
 }
 
 /**
@@ -67,11 +101,38 @@ function computeBackoff(attempt, baseDelay, maxDelay) {
  * @returns {boolean} `true` if the call should be retried.
  */
 function isRetryable(err) {
-  if (!err) return false;
-  if (err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT') return true;
-  if (err.status != null && RETRYABLE_STATUS_CODES.has(err.status)) return true;
-  if (err.response && RETRYABLE_STATUS_CODES.has(err.response.status)) return true;
+  if (!err) {
+    return false;
+  }
+  if (err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT') {
+    return true;
+  }
+  if (err.status !== null && err.status !== undefined && RETRYABLE_STATUS_CODES.has(err.status)) {
+    return true;
+  }
+  if (err.response && RETRYABLE_STATUS_CODES.has(err.response.status)) {
+    return true;
+  }
   return false;
+}
+
+/**
+ * Backward-compatible transient error detector based on message patterns.
+ *
+ * @param {unknown} err - Error thrown by the operation.
+ * @returns {boolean} True if message implies transient failure.
+ */
+function isTransientError(err) {
+  const message =
+    err && typeof err.message === 'string' ? err.message.toLowerCase() : '';
+  return (
+    message.includes('timeout') ||
+    message.includes('econnrefused') ||
+    message.includes('etimedout') ||
+    message.includes('network') ||
+    message.includes('503') ||
+    message.includes('429')
+  );
 }
 
 /**
@@ -107,7 +168,9 @@ async function withRetry(operation, config) {
     } catch (err) {
       lastErr = err;
       const isLast = attempt === maxRetries;
-      if (isLast || !isRetryable(err)) throw err;
+      if (isLast || !isRetryable(err)) {
+        throw err;
+      }
 
       const delay = computeBackoff(attempt, cfg.baseDelay, cfg.maxDelay);
       await sleep(delay);
@@ -126,6 +189,7 @@ async function withRetry(operation, config) {
  *
  * @template T
  * @param {() => Promise<T>} operation - Async function wrapping the contract call.
+ * @param {Object} [config] - Optional retry configuration overrides.
  * @returns {Promise<T>} Result of the contract call.
  *
  * @example
@@ -133,15 +197,18 @@ async function withRetry(operation, config) {
  *   client.invokeContract('get_escrow_state', [invoiceId])
  * );
  */
-async function callSorobanContract(operation) {
-  return withRetry(operation, SOROBAN_RETRY_CONFIG);
+async function callSorobanContract(operation, config) {
+  const cfg = config ? { ...SOROBAN_RETRY_CONFIG, ...config } : SOROBAN_RETRY_CONFIG;
+  return withRetry(operation, cfg);
 }
 
 module.exports = {
   callSorobanContract,
   withRetry,
   computeBackoff,
+  isTransientError,
   isRetryable,
+  isTransientError,
   SOROBAN_RETRY_CONFIG,
   RETRYABLE_STATUS_CODES,
 };
