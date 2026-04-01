@@ -237,8 +237,15 @@ function createApp() {
     });
   });
 
-  // Invoices — POST (create) with strict 512 KB body limit
+  // Invoices — POST (create) with strict payload validation and 512 KB body limit
   app.post('/api/invoices', ...invoiceBodyLimit(), (req, res) => {
+    const { isValid, errors } = validateInvoicePayload(req.body);
+
+    if (!isValid) {
+      res.status(400).json({ errors });
+      return;
+    }
+
     res.status(201).json({
       data: { id: 'placeholder', status: 'pending_verification' },
       message: 'Invoice upload will be implemented with verification and tokenization.',
