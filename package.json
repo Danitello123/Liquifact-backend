@@ -10,9 +10,6 @@
     "lint:fix": "eslint src/ --fix",
     "test": "jest",
     "test:coverage": "jest --coverage"
-    "test": "node --test tests/load/config.test.js tests/load/reporter.test.js tests/errors-unit.test.js tests/api-errors.test.js",
-    "test:coverage": "node --test --experimental-test-coverage tests/load/config.test.js tests/load/reporter.test.js tests/errors-unit.test.js tests/api-errors.test.js",
-    "load:baseline": "node tests/load/run-baselines.js"
   },
   "keywords": [],
   "author": "",

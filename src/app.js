@@ -18,7 +18,6 @@
 
 const express = require('express');
 const cors = require('cors');
-<<<<<<< HEAD
 const invoiceRoutes = require('./routes/invoiceRoutes');
 const { callSorobanContract } = require('./services/soroban');
 
@@ -98,7 +97,6 @@ app.use((err, req, res, _next) => {
 });
 
 module.exports = app;
-=======
 require('dotenv').config();
 
 const { callSorobanContract }               = require('./services/soroban');
@@ -249,4 +247,3 @@ module.exports = {
   handleCorsError,
   handleInternalError,
 };
->>>>>>> main

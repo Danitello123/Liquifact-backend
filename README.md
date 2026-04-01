@@ -160,7 +160,8 @@ tests/load/reports/
 │   ├── config/
 │   │   └── cors.js     # CORS allowlist parsing and policy
 │   ├── services/
-│   │   └── soroban.js  # Contract interaction wrappers
+│   │   ├── invoiceService.js # Business logic and pagination
+│   │   └── soroban.js        # Contract interaction wrappers
 │   ├── utils/
 │   │   └── retry.js    # Exponential backoff utility
 │   ├── app.js          # Express app, middleware, routes
