@@ -1,8 +1,14 @@
 const cors = require('cors');
+const request = require('supertest');
+
+jest.mock('./services/invoice.service', () => ({
+  getInvoices: jest.fn(),
+}));
 
 const { createApp, handleCorsError } = require('./app');
 const { CORS_REJECTION_MESSAGE } = require('./config/cors');
 const { createCorsOptions } = require('./config/cors');
+const invoiceService = require('./services/invoice.service');
 
 function withEnv(env, fn) {
   const previousValues = new Map();
@@ -270,7 +276,8 @@ describe('LiquiFact app integration', () => {
     });
   });
 
-  it('returns the invoice placeholder list', async () => {
+  it('returns the invoice list', async () => {
+    invoiceService.getInvoices.mockResolvedValue([]);
     const response = await invokeApp(createApp(), {
       path: '/api/invoices',
     });
@@ -278,21 +285,36 @@ describe('LiquiFact app integration', () => {
     expect(response.statusCode).toBe(200);
     expect(response.body).toEqual({
       data: [],
-      message: 'Invoice service will list tokenized invoices here.',
+      message: 'Invoices retrieved successfully.',
     });
   });
 
-  it('returns the invoice creation placeholder', async () => {
-    const response = await invokeApp(createApp(), {
-      method: 'POST',
-      path: '/api/invoices',
-    });
+  it('returns the invoice creation placeholder for a valid payload', async () => {
+    const response = await request(createApp())
+      .post('/api/invoices')
+      .send({
+        amount:   1500,
+        dueDate:  '2026-12-31',
+        buyer:    'Acme Corp',
+        seller:   'Stellar Goods Ltd',
+        currency: 'USD',
+      });
 
     expect(response.statusCode).toBe(201);
     expect(response.body).toEqual({
-      data: { id: 'placeholder', status: 'pending_verification' },
+      data:    { id: 'placeholder', status: 'pending_verification' },
       message: 'Invoice upload will be implemented with verification and tokenization.',
     });
+  });
+
+  it('rejects an invoice creation request with missing fields', async () => {
+    const response = await request(createApp())
+      .post('/api/invoices')
+      .send({ amount: 500 });
+
+    expect(response.statusCode).toBe(400);
+    expect(Array.isArray(response.body.errors)).toBe(true);
+    expect(response.body.errors.length).toBeGreaterThan(0);
   });
 
   it('returns the escrow placeholder through the Soroban wrapper', async () => {
@@ -304,6 +326,19 @@ describe('LiquiFact app integration', () => {
     expect(response.body).toEqual({
       data: { invoiceId: 'invoice-123', status: 'not_found', fundedAmount: 0 },
       message: 'Escrow state read from Soroban contract via robust integration wrapper.',
+    });
+  });
+
+  it('sanitizes route params before escrow lookup', async () => {
+    const response = await invokeApp(createApp(), {
+      path: '/api/escrow/%20invoice-123%0A',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.data).toEqual({
+      invoiceId: 'invoice-123',
+      status: 'not_found',
+      fundedAmount: 0,
     });
   });
 
