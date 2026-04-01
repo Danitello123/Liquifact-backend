@@ -1,26 +1,8 @@
 # LiquiFact Backend
 
-API gateway and server for LiquiFact — the global invoice liquidity network on Stellar.
-This repo provides the Express-based REST API for invoice uploads, escrow state, and (future) Stellar/Horizon integration.
+API gateway and server for LiquiFact, the global invoice liquidity network on Stellar. This repo provides the Express-based REST API for invoice uploads, escrow state, and future Stellar integration.
 
-Part of the LiquiFact stack: **frontend (Next.js)** | **backend (this repo)** | **contracts (Soroban)**.
-
----
-
-## Error Handling (RFC 7807)
-
-This API uses RFC 7807 Problem Details format for error responses.
-
-Example:
-{
-  "type": "https://example.com/errors/bad-request",
-  "title": "Bad Request",
-  "status": 400,
-  "detail": "Invalid input",
-  "instance": "/api/resource"
-}
-
-Content-Type: application/problem+json
+Part of the LiquiFact stack: frontend (Next.js) | backend (this repo) | contracts (Soroban).
 
 ---
 
@@ -33,346 +15,405 @@ Content-Type: application/problem+json
 
 ## Setup
 
-```bash
-# 1. Clone the repo
-git clone <this-repo-url>
-cd liquifact-backend
+1. Clone the repo
 
-# 2. Install dependencies
-npm ci
+   ```bash
+   git clone <this-repo-url>
+   cd liquifact-backend
+   ```
 
-# 3. Configure environment
-cp .env.example .env
-# Edit .env for CORS, body-size limits, Stellar/Horizon, or DB settings
-```
+2. Install dependencies
+
+   ```bash
+   npm ci
+   ```
+
+3. Configure environment if needed
+
+   ```bash
+   cp .env.example .env
+   ```
 
 ---
 
 ## Development
 
 | Command | Description |
-|---|---|
+| --- | --- |
 | `npm run dev` | Start API with watch mode |
-| `npm run start` | Start API (production-style) |
+| `npm run start` | Start API |
 | `npm run lint` | Run ESLint on `src/` |
-| `npm run lint:fix` | Auto-fix linting issues |
-| `npm test` | Run unit tests (Vitest) |
-| `npm run test:coverage` | Run tests with coverage report |
+| `npm test` | Run load helper tests and structured error tests |
+| `npm run test:coverage` | Run helper/API tests with coverage |
+| `npm run load:baseline` | Run the core endpoint load baseline suite |
 
-Default port: **3001**. After starting:
+Default port: `3001`.
 
-- Health: `http://localhost:3001/health`
-- API info: `http://localhost:3001/api`
-- Invoices: `http://localhost:3001/api/invoices`
-  - `GET  /api/invoices` — List active invoices
-  - `GET  /api/invoices?includeDeleted=true` — List all invoices
-  - `POST /api/invoices` — Create invoice *(512 KB body limit)*
-  - `DELETE /api/invoices/:id` — Soft delete invoice
-  - `PATCH  /api/invoices/:id/restore` — Restore deleted invoice
+Core routes currently covered:
+
+- Health: `GET /health`
+- Invoices: `GET /api/invoices`
+- Escrow: `GET /api/escrow/:invoiceId`
 
 ---
 
-## Request Body Size Limits
+## Project structure
 
-| Command                | Description                             |
-|------------------------|-----------------------------------------|
-| `npm run dev`          | Start API with watch mode               |
-| `npm run start`        | Start API (production-style)            |
-| `npm run lint`         | Run ESLint on `src/`                    |
-| `npm run lint:fix`     | Auto-fix linting issues                 |
-| `npm test`             | Run unit tests                          |
-| `npm run test:coverage`| Run tests with coverage report          |
+```text
+liquifact-backend/
+├── src/
+│   └── index.js
+├── tests/
+│   └── load/
+│       ├── config.js
+│       ├── reporter.js
+│       ├── run-baselines.js
+│       └── *.test.js
+├── .env.example
+├── eslint.config.js
+└── package.json
+```
 
-### How it works
+---
 
-The middleware lives in `src/middleware/bodySizeLimits.js` and is composed of three layers:
+## Load baseline suite
 
-1. **`jsonBodyLimit(limit?)`** — Wraps `express.json()` with a byte cap. Also guards against
-   forged `Content-Length` headers.
-2. **`urlencodedBodyLimit(limit?)`** — Same protection for URL-encoded form bodies.
-3. **`invoiceBodyLimit(limit?)`** — Stricter variant used on sensitive endpoints
-   (`POST /api/invoices`, escrow writes). Defaults to 512 KB.
-4. **`payloadTooLargeHandler`** — Error-handling middleware that catches body-parser's
-   `entity.too.large` error and converts it into a clean JSON 413 response.
+The repo includes a focused load baseline suite for representative core endpoint reads:
 
-### 413 Response Shape
+- `GET /health`
+- `GET /api/invoices`
+- `GET /api/escrow/:invoiceId`
+
+The suite uses `autocannon` and captures:
+
+- total requests
+- throughput in requests per second
+- average latency
+- p50 latency
+- p95 latency
+- p99 latency
+- error count
+- non-2xx count
+- timeout count
+
+### Why these endpoints
+
+These are the canonical health, invoices, and escrow endpoints currently exposed by the backend. They provide a low-risk baseline for throughput and latency without introducing destructive writes.
+
+### Safe defaults
+
+The load suite is intentionally safe by default:
+
+- it targets `http://127.0.0.1:3001`
+- it blocks remote targets unless `ALLOW_REMOTE_LOAD_BASELINES=true`
+- it does not hardcode tokens or credentials
+- it uses a placeholder escrow invoice id unless a fixture id is provided
+
+Do not run the suite against production without explicit approval.
+
+### Environment variables
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `LOAD_BASE_URL` | `http://127.0.0.1:3001` | Base URL for the load target |
+| `ALLOW_REMOTE_LOAD_BASELINES` | `false` | Explicit opt-in for non-local targets |
+| `LOAD_DURATION_SECONDS` | `15` | Duration per endpoint scenario |
+| `LOAD_CONNECTIONS` | `10` | Concurrent connections per scenario |
+| `LOAD_TIMEOUT_SECONDS` | `10` | Request timeout |
+| `LOAD_AUTH_TOKEN` | unset | Optional bearer token for protected endpoints |
+| `LOAD_ESCROW_INVOICE_ID` | `placeholder-invoice` | Escrow fixture id |
+| `LOAD_REPORT_DIR` | `tests/load/reports` | Directory for generated reports |
+
+### How to run
+
+1. Start the API locally:
+
+   ```bash
+   npm run dev
+   ```
+
+2. In another terminal, run the baseline suite:
+
+   ```bash
+   npm run load:baseline
+   ```
+
+3. Optional example with custom settings:
+
+   ```bash
+   LOAD_DURATION_SECONDS=20 LOAD_CONNECTIONS=25 LOAD_ESCROW_INVOICE_ID=invoice-123 npm run load:baseline
+   ```
+
+### Reports
+
+Each run generates:
+
+- a JSON artifact
+- a Markdown artifact
+- a console summary
+
+By default, reports are written to:
+
+```text
+tests/load/reports/
+```
+│   ├── config/
+│   │   └── cors.js     # CORS allowlist parsing and policy
+│   ├── services/
+│   │   ├── invoiceService.js # Business logic and pagination
+│   │   └── soroban.js        # Contract interaction wrappers
+│   ├── utils/
+│   │   └── retry.js    # Exponential backoff utility
+│   ├── app.js          # Express app, middleware, routes
+│   └── index.js        # Runtime bootstrap
+├── .env.example        # Env template
+├── eslint.config.js
+└── package.json
+```
+
+---
+
+## Resiliency & Retries
+
+### Security notes
+
+- Remote load targets are blocked by default.
+- Secrets and tokens must come from environment variables.
+- The suite never prints auth tokens.
+- If protected endpoints are added later, use least-privilege non-production credentials.
+- The selected baseline endpoints are low-risk reads to avoid destructive behavior.
+
+### Edge cases handled
+
+- missing base URL falls back to a safe local default
+- remote targets require explicit opt-in
+- invalid concurrency, duration, or timeout values are rejected
+- missing auth token is handled gracefully
+- missing escrow fixture id falls back to a placeholder
+- partial endpoint failures are still captured in the report
+
+### Limitations
+
+- This suite establishes baselines, not maximum capacity.
+- Results depend on local machine resources and runtime conditions.
+- The invoices and escrow endpoints are currently placeholders, so these baselines should be treated as early reference points rather than production sizing data.
+
+---
+
+## Structured API errors
+
+All API failures now return a consistent structured error payload:
 
 ```json
 {
-  "error": "Payload Too Large",
-  "message": "Request body exceeds the maximum allowed size of 512kb.",
-  "limit": "512kb",
-  "path": "/api/invoices"
-}
-```
-
-### Default Limits
-
-| Limit | Default | Env Variable |
-|---|---|---|
-| Global JSON bodies | `100kb` | `BODY_LIMIT_JSON` |
-| URL-encoded bodies | `50kb` | `BODY_LIMIT_URLENCODED` |
-| Raw / binary bodies | `1mb` | `BODY_LIMIT_RAW` |
-| Invoice upload endpoints | `512kb` | `BODY_LIMIT_INVOICE` |
-
-All limits are configurable via environment variables (see `.env.example`).
-
-### Overriding limits (`.env`)
-
-```dotenv
-BODY_LIMIT_JSON=200kb
-BODY_LIMIT_INVOICE=256kb
-```
-
-### Security assumptions validated
-
-| Assumption | How it is enforced |
-|---|---|
-| Forged `Content-Length` headers | Secondary guard middleware checks the header value against `parseSize(limit)` before body parsing can complete. |
-| Primitive JSON root values (`"string"`, `42`) | `express.json` runs in `strict: true` mode — only objects and arrays are accepted. |
-| Misconfigured limit strings | `parseSize()` throws `TypeError` / `RangeError` at startup, preventing silent misconfigurations. |
-| Unbounded retries on upstream calls | Separate `src/utils/retry.js` hard-caps retries at 10 and delay at 60 s. |
-
----
-
-## Code Quality & Testing
-
-### ESLint
-
-We enforce strict linting rules using `eslint:recommended`.
-All code must include JSDoc comments for maintainability.
-
-```bash
-npm run lint       # check
-npm run lint:fix   # auto-fix
-```
-
-### Testing
-We use **Jest** and **Supertest** for testing.
-- Run tests: `npm test`
-- Check coverage: `npm run test:coverage`
-
-```bash
-npm test                # run all tests
-npm run test:coverage   # run with coverage report
-```
-
-Coverage target: **≥ 95% lines and statements**.
-
-Test suite covers:
-
-- `parseSize()` — 11 happy-path cases, 6 TypeError cases, 3 RangeError cases
-- `DEFAULT_LIMITS` — all four keys are parseable and non-zero
-- `jsonBodyLimit()` — pass/fail/413-shape/malformed/strict-mode/Content-Length guard
-- `urlencodedBodyLimit()` — pass/fail/413-shape/Content-Length guard
-- `invoiceBodyLimit()` — default limit, custom limit, response shape
-- `payloadTooLargeHandler()` — converts `entity.too.large`, passes through other errors
-- **Full app integration** — health, api-info, GET/POST invoices, oversized 413 end-to-end
-
----
-
-## Authentication
-
-Protected endpoints (invoice mutations, escrow operations) require a JWT in the `Authorization` header:
-
-```
-Authorization: Bearer <jwt_token_here>
-```
-
-The middleware validates the token against `JWT_SECRET` (defaults to `test-secret` locally).
-Unauthenticated requests are rejected with `401 Unauthorized`.
-
----
-
-## Rate Limiting
-
-| Scope | Limit |
-|---|---|
-| Global (per IP / User ID) | 100 requests / 15 minutes |
-| Sensitive operations (invoice upload, escrow writes) | 10 requests / hour per IP |
-
-Clients exceeding limits receive `429 Too Many Requests`.
-Check the standard `RateLimit-*` headers for quota and reset time.
-
----
-
-## Configuration
-
-### CORS Allowlist
-
-```dotenv
-CORS_ALLOWED_ORIGINS=https://app.example.com,https://admin.example.com
-```
-
-Behavior:
-- Requests without an `Origin` header are allowed, as it can be curl, postman, etc.
-- Requests from allowed origins receive normal CORS headers.
-- Requests from disallowed origins are rejected with `403 Forbidden`.
-- Origin matching is exact only. Wildcards and regex patterns are not supported.
-
-**Development default:** If `NODE_ENV=development` and `CORS_ALLOWED_ORIGINS` is unset,
-common local origins are allowed automatically.
-
-**Production default:** If `CORS_ALLOWED_ORIGINS` is unset outside development,
-all browser origins are denied.
-
----
-
-## API Response Structure
-
-All endpoints return a standardized JSON envelope:
-
-```json
-{
-  "data": { ... },
-  "meta": {
-    "timestamp": "2026-03-24T09:55:00.000Z",
-    "version": "0.1.0"
-  },
-  "error": null
-}
-```
-
-In case of an error:
-
-```json
-{
-  "data": null,
-  "meta": { ... },
   "error": {
-    "message": "Human readable message",
-    "code": "ERROR_CODE",
-    "details": { ... }
+    "code": "VALIDATION_ERROR",
+    "message": "Malformed JSON request body.",
+    "correlation_id": "req_f7d1b9f6c0f1459d8b3b7b6a",
+    "retryable": false,
+    "retry_hint": "Fix the JSON payload and try again."
+  }
+}
+```
+
+### Error fields
+
+- `code`: stable machine-readable error code
+- `message`: safe human-readable message
+- `correlation_id`: per-request identifier for debugging and support
+- `retryable`: whether the caller may safely retry
+- `retry_hint`: safe retry guidance
+
+### Current error categories
+
+- `VALIDATION_ERROR`
+- `AUTHENTICATION_REQUIRED`
+- `FORBIDDEN`
+- `NOT_FOUND`
+- `UPSTREAM_ERROR`
+- `INTERNAL_SERVER_ERROR`
+
+### Correlation IDs
+
+- Every request receives a correlation ID.
+- The API returns it in both the response body and the `X-Correlation-Id` header.
+- If a client sends `X-Correlation-Id` and it matches the accepted pattern, the value is echoed back.
+- Invalid client-supplied IDs are ignored and replaced with a generated ID.
+
+### Structured failure behavior
+
+The centralized mapper covers:
+
+- malformed JSON
+- validation failures
+- authorization and authentication failures
+- not found responses
+- upstream connection failures
+- unexpected thrown errors
+- non-`Error` thrown values
+
+### Security notes
+
+- Internal stack traces and raw exception details are never returned to clients.
+- Correlation IDs are sanitized and do not expose internal state.
+- Retry hints are generic and do not leak infrastructure details.
+- Server-side logs include correlation context without returning sensitive internals in responses.
+
+### Example responses
+
+Validation error:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invoice payload must be a JSON object.",
+    "correlation_id": "req_d3b92b4d2d554f33b8d8b089",
+    "retryable": false,
+    "retry_hint": "Send a valid JSON object in the request body and try again."
+  }
+}
+```
+
+Unexpected error:
+
+```json
+{
+  "error": {
+    "code": "INTERNAL_SERVER_ERROR",
+    "message": "An internal server error occurred.",
+    "correlation_id": "req_3d5d8c9e4ff34dd9aa73b946",
+    "retryable": false,
+    "retry_hint": "Do not retry until the issue is resolved or support is contacted."
   }
 }
 ```
 
 ---
 
-## Project structure
+## Load baseline suite
 
+The repo includes a focused load baseline suite for representative core endpoint reads:
+
+- `GET /health`
+- `GET /api/invoices`
+- `GET /api/escrow/:invoiceId`
+
+The suite uses `autocannon` and captures:
+
+- total requests
+- throughput in requests per second
+- average latency
+- p50 latency
+- p95 latency
+- p99 latency
+- error count
+- non-2xx count
+- timeout count
+
+### Safe defaults
+
+- targets `http://127.0.0.1:3001`
+- blocks remote targets unless `ALLOW_REMOTE_LOAD_BASELINES=true`
+- does not hardcode tokens or credentials
+- uses a placeholder escrow invoice id unless a fixture id is provided
+
+Do not run the suite against production without explicit approval.
+
+### Environment variables
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `LOAD_BASE_URL` | `http://127.0.0.1:3001` | Base URL for the load target |
+| `ALLOW_REMOTE_LOAD_BASELINES` | `false` | Explicit opt-in for non-local targets |
+| `LOAD_DURATION_SECONDS` | `15` | Duration per endpoint scenario |
+| `LOAD_CONNECTIONS` | `10` | Concurrent connections per scenario |
+| `LOAD_TIMEOUT_SECONDS` | `10` | Request timeout |
+| `LOAD_AUTH_TOKEN` | unset | Optional bearer token for protected endpoints |
+| `LOAD_ESCROW_INVOICE_ID` | `placeholder-invoice` | Escrow fixture id |
+| `LOAD_REPORT_DIR` | `tests/load/reports` | Directory for generated reports |
+
+### How to run
+
+```bash
+npm run dev
+npm run load:baseline
 ```
-liquifact-backend/
-├── src/
-│   ├── app.js               # Express application setup
-│   ├── index.js             # Server entry point
-│   ├── utils/
-│   │   └── responseHelper.js # Standardized response logic
-│   └── tests/
-│       └── response.test.js # Coverage-backed integration tests
-├── .env.example
-│   │   └── cors.js     # CORS allowlist parsing and policy
-│   │   └── cors.js       # CORS allowlist parsing and policy
-│   ├── middleware/
-│   │   └── security.js   # Helmet security header configuration
-│   ├── services/
-│   │   └── soroban.js    # Contract interaction wrappers
-│   ├── utils/
-│   │   ├── asyncHandler.js # Async route wrapper
-│   │   ├── queryBuilder.js # Reusable DB query builder
-│   │   ├── retry.js    # Exponential backoff utility
-│   │   └── validators.js # Input validation utilities
-│   ├── app.js          # Express app, middleware, routes
-│   └── index.js        # Runtime bootstrap
-├── .env.example        # Env template
-│   │   └── retry.js      # Exponential backoff utility
-│   ├── index.js          # Express app, routes, error handler (importable for tests)
-│   ├── index.test.js     # Integration + security header tests (Jest + supertest)
-│   └── server.js         # Server entry point — binds app to PORT
-├── .env.example          # Env template (PORT, Stellar, DB placeholders)
-├── eslint.config.js
-├── vitest.config.js
-└── package.json
+
+### Security notes
+
+- Remote load targets are blocked by default.
+- Secrets and tokens must come from environment variables.
+- The suite never prints auth tokens.
+- The selected baseline endpoints are low-risk reads.
+
+---
+
+## Structured API errors
+
+All API failures return a structured error payload:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Malformed JSON request body.",
+    "correlation_id": "req_f7d1b9f6c0f1459d8b3b7b6a",
+    "retryable": false,
+    "retry_hint": "Fix the JSON payload and try again."
+  }
+}
 ```
 
----
+### Current error categories
 
-## Security
+- `VALIDATION_ERROR`
+- `AUTHENTICATION_REQUIRED`
+- `INVALID_TOKEN`
+- `FORBIDDEN`
+- `NOT_FOUND`
+- `RATE_LIMITED`
+- `UPSTREAM_ERROR`
+- `INTERNAL_SERVER_ERROR`
 
-HTTP response headers are hardened via [Helmet](https://helmetjs.github.io/) (`src/middleware/security.js`). Applied headers include:
+### Security notes
 
-| Header | Value / Policy |
-|--------|----------------|
-| `Content-Security-Policy` | Restricts all resource loading to `'self'`; blocks objects and frames |
-| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains; preload` |
-| `X-Frame-Options` | `DENY` — prevents clickjacking |
-| `X-Content-Type-Options` | `nosniff` — disables MIME sniffing |
-| `Referrer-Policy` | `strict-origin-when-cross-origin` |
-| `Cross-Origin-Opener-Policy` | `same-origin` |
-| `Cross-Origin-Resource-Policy` | `same-origin` |
-| `Cross-Origin-Embedder-Policy` | `require-corp` |
-| `X-DNS-Prefetch-Control` | `off` |
-| `X-Permitted-Cross-Domain-Policies` | `none` |
-| `X-Powered-By` | Removed (technology fingerprinting prevention) |
+- Internal stack traces and raw exception details are never returned to clients.
+- Correlation IDs are sanitized.
+- Retry hints are generic and do not leak infrastructure details.
 
 ---
 
-## Resiliency & Retries
+## Negative middleware security tests
 
-To ensure reliable communication with Soroban contract provider APIs, this backend implements a robust **Retry and Backoff** mechanism (`src/utils/retry.js`).
+The repo includes a focused negative security test suite for middleware hardening.
 
-- **Automatic retries** for HTTP 429, 502, 503, 504, and network timeouts.
-- **Jitter** (±20%) prevents thundering-herd problems.
-- **Hard caps:** `maxRetries ≤ 10`, `maxDelay ≤ 60 000 ms`, `baseDelay ≤ 10 000 ms`.
+### Scenarios covered
 
----
+- unauthorized requests with no `Authorization` header
+- malformed `Authorization` header formats
+- invalid or tampered Bearer tokens
+- rate-limited abuse against a representative protected endpoint
+- non-leakage checks for error bodies and headers
+- public-route behavior when malformed auth headers are present
 
-## Invoice Filtering & Sorting
+GitHub Actions runs on push and pull requests to `main`:
 
-Endpoint: GET /invoices
-
-Query Parameters:
-- status: paid | pending | overdue
-- sme: SME ID
-- buyer: Buyer ID
-- dateFrom: ISO date
-- dateTo: ISO date
-- sortBy: amount | date
-- order: asc | desc
-
-Example:
-GET /invoices?status=paid&sortBy=amount&order=desc
-
----
-
-## CI/CD
-
-GitHub Actions runs on every push and pull request to `main`:
-
-- **Lint** — `npm run lint`
-- **Tests** — `npm run test:coverage`
-- **Build check** — `node --check src/index.js` (syntax)
-
-Ensure your branch passes all checks before opening a PR.
+- Lint: `npm run lint`
+- Build check: `node --check src/index.js`
 
 ---
 
 ## Contributing
 
-```bash
-# 1. Fork and clone
-git clone <your-fork-url>
-cd liquifact-backend
+1. Fork the repo and clone your fork.
+2. Create a branch from `main`.
+3. Run `npm ci`.
+4. Make focused changes and keep style consistent.
+5. Run `npm run lint`, `npm test`, and any relevant local checks.
+6. Push your branch and open a pull request.
 
-# 2. Create a feature branch
-git checkout -b feature/your-feature   # or fix/your-fix
-
-# 3. Install and configure
-npm ci
-cp .env.example .env
-
-# 4. Make changes, keeping style consistent
-npm run lint:fix
-npm test
-
-# 5. Commit with a clear message
-git commit -m "feat: add X"   # or "fix: Y"
-
-# 6. Push and open a Pull Request to main
-git push origin feature/your-feature
-```
-
-We welcome docs improvements, bug fixes, and new API endpoints aligned with the LiquiFact product.
+We welcome docs improvements, bug fixes, and new API endpoints aligned with LiquiFact product goals.
 
 ---
 
