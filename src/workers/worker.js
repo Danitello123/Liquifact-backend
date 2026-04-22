@@ -13,6 +13,7 @@
  */
 
 const JobQueue = require('./jobQueue');
+const logger = require('../logger');
 
 /**
  * Background worker that processes queued jobs
@@ -124,8 +125,9 @@ class BackgroundWorker {
     }
 
     if (this.processingCount > 0) {
-      console.warn(
-        `Worker stopped with ${this.processingCount} jobs still processing (timeout)`
+      logger.warn(
+        { processingCount: this.processingCount },
+        'Worker stopped with jobs still processing (timeout)'
       );
     }
   }
@@ -188,7 +190,7 @@ class BackgroundWorker {
 
       // Process job asynchronously (don't await, let it run in background)
       this._processJob(job).catch((err) => {
-        console.error(`Unexpected error processing job ${job.id}:`, err);
+        logger.error({ err, jobId: job.id }, 'Unexpected error processing job');
       });
     }
 

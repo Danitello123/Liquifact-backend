@@ -1,5 +1,6 @@
 const AppError = require('../errors/AppError');
 const { mapError } = require('../errors/mapError');
+const logger = require('../logger');
 
 /**
  * Express 404 handler that forwards a structured not-found error.
@@ -32,15 +33,15 @@ function notFoundHandler(req, _res, next) {
  */
 function errorHandler(error, req, res, _next) {
   const mapped = mapError(error);
-  const correlationId = req.correlationId || 'unknown';
+  const requestId = req.id || 'unknown';
 
-  logError(error, correlationId);
+  logError(error, requestId);
 
   res.status(mapped.status).json({
     error: {
       code: mapped.code,
       message: mapped.message,
-      correlation_id: correlationId,
+      correlation_id: req.id || 'unknown',
       retryable: mapped.retryable,
       retry_hint: mapped.retryHint,
     },
@@ -54,13 +55,13 @@ function errorHandler(error, req, res, _next) {
  * @param {string} correlationId Request correlation ID.
  * @returns {void}
  */
-function logError(error, correlationId) {
+function logError(error, requestId) {
   const message =
     error && typeof error === 'object' && typeof error.message === 'string'
       ? error.message
       : 'Non-error value thrown';
 
-  console.error(`[${correlationId}] ${message}`);
+  logger.error({ err: error, requestId }, message);
 }
 
 module.exports = errorHandler;

@@ -20,6 +20,9 @@ const { authenticateToken } = require('./middleware/auth');
 const errorHandler = require('./middleware/errorHandler');
 const { callSorobanContract } = require('./services/soroban');
 const AppError = require('./errors/AppError');
+const logger = require('./logger');
+const requestId = require('./middleware/requestId');
+const pinoHttp = require('pino-http');
 
 const PORT = process.env.PORT || 3001;
 
@@ -36,6 +39,29 @@ let invoices = [];
 function createApp(options = {}) {
   const { enableTestRoutes = false } = options;
   const app = express();
+
+  app.use(requestId);
+  app.use(pinoHttp({
+    logger,
+    genReqId: (req) => req.id,
+    customLogLevel: (req, res, err) => {
+      if (res.statusCode >= 500 || err) return 'error';
+      if (res.statusCode >= 400) return 'warn';
+      return 'info';
+    },
+    serializers: {
+      req: (req) => ({
+        id: req.id,
+        method: req.method,
+        url: req.url,
+        query: req.query,
+        headers: {
+          'x-tenant-id': req.headers['x-tenant-id'],
+          'user-agent': req.headers['user-agent'],
+        },
+      }),
+    },
+  }));
 
   app.use(createSecurityMiddleware());
   app.use(cors());
@@ -216,15 +242,15 @@ function createApp(options = {}) {
     );
   });
 
+  // RFC 7807 error handler — handles AppError + generic errors.
+  app.use(errorHandler);
+
   return app;
 }
 
 const app = createApp({ enableTestRoutes: process.env.NODE_ENV === 'test' });
 
 // ─── Server lifecycle ─────────────────────────────────────────────────────────
-
-// RFC 7807 error handler — handles AppError + generic errors.
-app.use(errorHandler);
 
 /**
  * Starts the HTTP server.
@@ -233,7 +259,7 @@ app.use(errorHandler);
  */
 const startServer = () => {
   const server = app.listen(PORT, () => {
-    console.warn(`LiquiFact API running at http://localhost:${PORT}`);
+    logger.warn(`LiquiFact API running at http://localhost:${PORT}`);
   });
   return server;
 };

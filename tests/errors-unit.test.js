@@ -1,6 +1,7 @@
 const AppError = require('../src/errors/AppError');
 const { mapError, isBodyParserSyntaxError } = require('../src/errors/mapError');
 const { logError } = require('../src/middleware/errorHandler');
+const logger = require('../src/logger');
 
 describe('mapError', () => {
   it('preserves AppError metadata', () => {
@@ -61,17 +62,16 @@ describe('mapError', () => {
 
 describe('logError', () => {
   it('handles non-error values safely', () => {
-    const messages = [];
-    const original = console.error;
-    console.error = (value) => messages.push(value);
+    jest.spyOn(logger, 'error').mockImplementation(() => {});
 
     try {
       logError('boom', 'req_test123');
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ requestId: 'req_test123' }),
+        'Non-error value thrown'
+      );
     } finally {
-      console.error = original;
+      logger.error.mockRestore();
     }
-
-    expect(messages.length).toBe(1);
-    expect(messages[0]).toMatch(/\[req_test123\] Non-error value thrown/);
   });
 });

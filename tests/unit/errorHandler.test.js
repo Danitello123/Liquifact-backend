@@ -2,6 +2,7 @@ const request = require('supertest');
 const errorHandler = require('../../src/middleware/errorHandler');
 const AppError = require('../../src/errors/AppError');
 const createTestApp = require('../helpers/createTestApp');
+const logger = require('../../src/logger');
 
 describe('errorHandler Middleware Unit Tests', () => {
   let mockRequest;
@@ -11,18 +12,18 @@ describe('errorHandler Middleware Unit Tests', () => {
   beforeEach(() => {
     mockRequest = {
       originalUrl: '/api/v1/test',
-      correlationId: 'cid-test',
+      id: 'cid-test',
     };
     mockResponse = {
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
     };
     nextFunction = jest.fn();
-    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(logger, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    console.error.mockRestore();
+    logger.error.mockRestore();
   });
 
   test('should handle AppError and send standardized envelope', () => {

@@ -32,6 +32,7 @@ const {
 } = require('./middleware/bodySizeLimits');
 const { performHealthChecks } = require('./services/health');
 const responseHelper = require('./utils/responseHelper');
+const logger = require('./logger');
 
 /**
  * Returns a 403 JSON response only for the dedicated blocked-origin CORS error.
@@ -67,7 +68,7 @@ function handleInternalError(err, req, res, _next) {
     return;
   }
 
-  console.error(err);
+  logger.error({ err, reqId: req.id }, 'Internal server error');
   if (isDevelopment) {
     res.status(500).json({
       error: {
