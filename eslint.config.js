@@ -25,7 +25,7 @@ module.exports = [
     },
   },
   {
-    files: ['src/**/*.test.js', 'src/**/__tests__/**/*.js', 'src/__tests__/**/*.js'],
+    files: ['src/**/*.test.js', 'src/**/__tests__/**/*.js', 'src/__tests__/**/*.js', 'tests/**/*.js'],
     languageOptions: {
       globals: {
         ...globals.node,
