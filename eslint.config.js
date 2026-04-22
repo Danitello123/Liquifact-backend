@@ -4,6 +4,9 @@ const globals = require('globals');
 
 module.exports = [
   {
+    ignores: ['coverage/**'],
+  },
+  {
     files: ['src/**/*.js'],
     plugins: { security, jsdoc },
     languageOptions: {
