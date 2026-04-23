@@ -12,6 +12,9 @@ class AppError extends Error {
    * @param {number} params.status - The HTTP status code (e.g., 400, 404, 500).
    * @param {string} params.detail - A human-readable explanation specific to this occurrence of the problem.
    * @param {string} [params.instance] - A URI reference that identifies the specific occurrence of the problem.
+   * @param {string} [params.code] - An application-specific error code.
+   * @param {boolean} [params.retryable] - Whether the error is transient and can be retried.
+   * @param {string} [params.retryHint] - A hint for when to retry.
    * @returns {AppError}
    */
   constructor({ type, title, status, detail, instance, code, retryable, retryHint }) {

@@ -197,6 +197,19 @@ class JobQueue {
   }
 
   /**
+   * Cancel a pending or delayed job
+   * 
+   * Removes the job from the internal store. Because the queue dequeue checks for existence
+   * in the jobs map, it will be safely skipped.
+   * 
+   * @param {string} jobId - The job ID to cancel
+   * @returns {boolean} True if the job was successfully canceled, false if not found
+   */
+  cancel(jobId) {
+    return this.jobs.delete(jobId);
+  }
+
+  /**
    * Retry a failed job with exponential backoff
    * 
    * If the job has remaining retry attempts, it's put back in the retry queue
