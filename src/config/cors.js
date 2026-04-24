@@ -1,7 +1,7 @@
 /**
  * @fileoverview CORS allowlist parsing and policy for the LiquiFact API.
  *
- * Reads trusted origins from the `CORS_ALLOWED_ORIGINS` environment variable
+ * Reads trusted origins from the `CORS_ORIGINS` environment variable
  * (comma-separated list of exact origins) and builds an `options` object
  * compatible with the `cors` npm package.
  *
@@ -11,9 +11,9 @@
  * - Requests from an **allowed origin** receive normal CORS response headers.
  * - Requests from a **disallowed origin** receive a 403 Forbidden response
  * via a dedicated `Error` whose `.isCorsOriginRejected` flag is `true`.
- * - In `NODE_ENV=development`, when `CORS_ALLOWED_ORIGINS` is not set, a set
+ * - In `NODE_ENV=development`, when `CORS_ORIGINS` is not set, a set
  * of common local development origins is permitted automatically.
- * - In all other environments, when `CORS_ALLOWED_ORIGINS` is not set, every
+ * - In all other environments, when `CORS_ORIGINS` is not set, every
  * browser origin is denied.
  *
  * @module config/cors
@@ -47,7 +47,7 @@ function getDevelopmentFallbackOrigins() {
 }
 
 /**
- * Parses `CORS_ALLOWED_ORIGINS` into a trimmed, de-duplicated array of origin
+ * Parses `CORS_ORIGINS` into a trimmed, de-duplicated array of origin
  * strings. Returns `[]` when the value is absent or blank.
  *
  * @param {string|undefined} raw - Raw value of the environment variable.
@@ -74,7 +74,7 @@ function parseAllowedOrigins(raw) {
  * @returns {string[]} Origins to allow for browser requests with an Origin header.
  */
 function getAllowedOriginsFromEnv(env = process.env) {
-  const fromEnv = parseAllowedOrigins(env.CORS_ALLOWED_ORIGINS);
+  const fromEnv = parseAllowedOrigins(env.CORS_ORIGINS);
   if (fromEnv.length > 0) {
     return fromEnv;
   }

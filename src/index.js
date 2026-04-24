@@ -15,6 +15,10 @@ const cors = require('cors');
 require('dotenv').config();
 
 const { createSecurityMiddleware } = require('./middleware/security');
+const { createCorsOptions } = require('./config/cors');
+const { correlationIdMiddleware } = require('./middleware/correlationId');
+const { jsonBodyLimit, urlencodedBodyLimit, payloadTooLargeHandler } = require('./middleware/bodySizeLimits');
+const { auditMiddleware } = require('./middleware/audit');
 const { globalLimiter, sensitiveLimiter } = require('./middleware/rateLimit');
 const { authenticateToken } = require('./middleware/auth');
 const errorHandler = require('./middleware/errorHandler');
@@ -65,9 +69,12 @@ function createApp(options = {}) {
   }));
 
   app.use(createSecurityMiddleware());
-  app.use(cors());
-  app.use(express.json());
+  app.use(correlationIdMiddleware);
+  app.use(cors(createCorsOptions()));
+  app.use(jsonBodyLimit());
+  app.use(urlencodedBodyLimit());
   app.use(globalLimiter);
+  app.use(auditMiddleware);
 
   app.get('/health', (req, res) => {
     return res.json({
@@ -232,6 +239,8 @@ function createApp(options = {}) {
       throw 'boom';
     });
   }
+
+  app.use(payloadTooLargeHandler);
 
   app.use((req, res, next) => {
     next(
