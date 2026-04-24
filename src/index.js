@@ -21,6 +21,7 @@ const { jsonBodyLimit, urlencodedBodyLimit, payloadTooLargeHandler } = require('
 const { auditMiddleware } = require('./middleware/audit');
 const { globalLimiter, sensitiveLimiter } = require('./middleware/rateLimit');
 const { authenticateToken } = require('./middleware/auth');
+const smeRouter = require('./routes/sme');
 const errorHandler = require('./middleware/errorHandler');
 const { callSorobanContract } = require('./services/soroban');
 const AppError = require('./errors/AppError');
@@ -48,6 +49,8 @@ function createApp(options = {}) {
   app.use(urlencodedBodyLimit());
   app.use(globalLimiter);
   app.use(auditMiddleware);
+
+  app.use('/api/sme', smeRouter);
 
   app.get('/health', (req, res) => {
     return res.json({
