@@ -29,6 +29,7 @@ const errorHandler = require('./middleware/errorHandler');
 const { callSorobanContract } = require('./services/soroban');
 const AppError = require('./errors/AppError');
 const logger = require('./logger');
+const sentry = require('./observability/sentry');
 const requestId = require('./middleware/requestId');
 const pinoHttp = require('pino-http');
 const investRoutes = require('./routes/invest');
@@ -171,6 +172,7 @@ function createApp(options = {}) {
   app.use(cors(createCorsOptions()));
   app.use(jsonBodyLimit());
   app.use(urlencodedBodyLimit());
+  app.use(sentry.requestHandler());
   app.use(globalLimiter);
   app.use(auditMiddleware);
 
@@ -682,6 +684,7 @@ function createApp(options = {}) {
   return app;
 }
 
+sentry.initSentry();
 const app = createApp({ enableTestRoutes: process.env.NODE_ENV === 'test' });
 
 // ─── Server lifecycle ─────────────────────────────────────────────────────────

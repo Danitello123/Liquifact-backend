@@ -36,6 +36,25 @@ Part of the LiquiFact stack: frontend (Next.js) | backend (this repo) | contract
 
 ---
 
+## Observability
+
+Optional Sentry error tracking is supported through the `SENTRY_DSN` environment variable. When enabled, the server scrubs sensitive values before sending events, including:
+
+- Invoice payload bodies and invoice-related fields
+- Authorization headers and bearer tokens
+- API keys and secret values
+- Stellar XDR / Stellar-specific payloads
+
+Environment variables:
+
+- `SENTRY_DSN` — Optional Sentry DSN. Example: `https://<PUBLIC_KEY>@o<ORG_ID>.ingest.sentry.io/<PROJECT_ID>`
+- `SENTRY_RELEASE` — Optional release tag. Defaults to package version when available.
+- `SENTRY_ENVIRONMENT` — Optional environment tag. Defaults to `NODE_ENV`.
+
+Do not store secrets in source control. Use `.env` locally and deployment secrets in production.
+
+---
+
 ## Development
 
 | Command | Description |
