@@ -6,7 +6,7 @@ const db = require('../db/knex');
 const retentionJob = require('../jobs/retentionPurge');
 const { authenticateToken } = require('../middleware/auth');
 const { apiKeyAuth } = require('../middleware/apiKey');
-const { globalLimiter, sensitiveLimiter } = require('../middleware/rateLimit');
+const { sensitiveLimiter } = require('../middleware/rateLimit');
 const AppError = require('../errors/AppError');
 const logger = require('../logger');
 
@@ -14,6 +14,10 @@ const router = express.Router();
 
 /**
  * Combined authentication middleware: allows JWT or API key for admin/service auth
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next function
+ * @returns {void}
  */
 function adminAuth(req, res, next) {
   if (req.headers['x-api-key']) {
@@ -129,7 +133,7 @@ router.get('/policies', adminAuth, async (req, res) => {
  */
 router.post('/policies', adminAuth, sensitiveLimiter, async (req, res) => {
   try {
-    const { tenantId, userId } = req;
+    const { tenantId } = req;
     const validatedData = CreatePolicySchema.parse(req.body);
 
     // Check if policy name already exists for this tenant
@@ -165,8 +169,7 @@ router.post('/policies', adminAuth, sensitiveLimiter, async (req, res) => {
     logger.info({
       tenantId,
       policyId: policy.id,
-      policyName: policy.name,
-      userId
+      policyName: policy.name
     }, 'Retention policy created');
 
     res.status(201).json({
@@ -219,7 +222,7 @@ router.post('/policies', adminAuth, sensitiveLimiter, async (req, res) => {
  */
 router.put('/policies/:policyId', adminAuth, sensitiveLimiter, async (req, res) => {
   try {
-    const { tenantId, userId } = req;
+    const { tenantId } = req;
     const { policyId } = req.params;
     const validatedData = CreatePolicySchema.partial().parse(req.body);
 
@@ -249,7 +252,6 @@ router.put('/policies/:policyId', adminAuth, sensitiveLimiter, async (req, res) 
       tenantId,
       policyId,
       policyName: updatedPolicy.name,
-      userId,
       changes: validatedData
     }, 'Retention policy updated');
 
@@ -353,7 +355,7 @@ router.get('/legal-holds', adminAuth, async (req, res) => {
  */
 router.post('/legal-holds', adminAuth, sensitiveLimiter, async (req, res) => {
   try {
-    const { tenantId, userId } = req;
+    const { tenantId } = req;
     const validatedData = CreateLegalHoldSchema.parse(req.body);
 
     // Verify invoice exists and belongs to tenant
@@ -398,7 +400,7 @@ router.post('/legal-holds', adminAuth, sensitiveLimiter, async (req, res) => {
         hold_reason: validatedData.holdReason,
         hold_type: validatedData.holdType,
         expires_at: validatedData.expiresAt ? new Date(validatedData.expiresAt) : null,
-        placed_by: userId,
+        placed_by: req.userId,
         metadata: validatedData.metadata || {}
       })
       .returning('*');
@@ -408,8 +410,7 @@ router.post('/legal-holds', adminAuth, sensitiveLimiter, async (req, res) => {
       holdId: hold.id,
       invoiceId: validatedData.invoiceId,
       invoiceNumber: invoice.invoice_number,
-      holdType: validatedData.holdType,
-      userId
+      holdType: validatedData.holdType
     }, 'Legal hold created');
 
     res.status(201).json({
@@ -471,7 +472,7 @@ router.post('/legal-holds', adminAuth, sensitiveLimiter, async (req, res) => {
  */
 router.post('/legal-holds/:holdId/release', adminAuth, sensitiveLimiter, async (req, res) => {
   try {
-    const { tenantId, userId } = req;
+    const { tenantId } = req;
     const { holdId } = req.params;
     const { releaseReason } = req.body;
 
@@ -501,8 +502,7 @@ router.post('/legal-holds/:holdId/release', adminAuth, sensitiveLimiter, async (
       tenantId,
       holdId,
       invoiceId: hold.invoice_id,
-      releaseReason,
-      userId
+      releaseReason
     }, 'Legal hold released');
 
     res.json({
@@ -545,7 +545,7 @@ router.post('/legal-holds/:holdId/release', adminAuth, sensitiveLimiter, async (
  */
 router.post('/jobs/schedule', adminAuth, sensitiveLimiter, async (req, res) => {
   try {
-    const { tenantId, userId } = req;
+    const { tenantId } = req;
     const validatedData = ScheduleJobSchema.parse(req.body);
 
     // Validate policy if specified
@@ -580,7 +580,7 @@ router.post('/jobs/schedule', adminAuth, sensitiveLimiter, async (req, res) => {
       dryRun: validatedData.dryRun,
       retentionDays: validatedData.retentionDays,
       piiFields: validatedData.piiFields,
-      performedBy: userId,
+      performedBy: req.userId,
       batchSize: validatedData.batchSize,
       delayMs: validatedData.delayMs
     });
@@ -589,8 +589,7 @@ router.post('/jobs/schedule', adminAuth, sensitiveLimiter, async (req, res) => {
       tenantId,
       jobId,
       policyId: validatedData.policyId,
-      dryRun: validatedData.dryRun,
-      userId
+      dryRun: validatedData.dryRun
     }, 'Retention job scheduled');
 
     res.status(201).json({
@@ -842,7 +841,7 @@ router.get('/audit', adminAuth, async (req, res) => {
  */
 router.post('/preview', adminAuth, async (req, res) => {
   try {
-    const { tenantId, userId } = req;
+    const { tenantId } = req;
     const { policyId, retentionDays, piiFields } = req.body;
 
     // Get active policies or use specified policy
