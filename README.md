@@ -52,6 +52,8 @@ Part of the LiquiFact stack: frontend (Next.js) | backend (this repo) | contract
 | `npm run load:baseline` | Run the core endpoint load baseline suite |
 
 Default port: `3001`.
+Escrow Redis cache is optional and disabled by default; set `REDIS_ESCROW_CACHE_ENABLED=true` with `REDIS_URL` to enable it.
+`REDIS_ESCROW_CACHE_TTL_SECONDS` is strictly clamped to `5..300`, and `REDIS_ESCROW_LEDGER_GAP_THRESHOLD` controls ledger-gap invalidation.
 
 Incremental TypeScript setup and migration guidance lives in `docs/typescript-plan.md`.
 
