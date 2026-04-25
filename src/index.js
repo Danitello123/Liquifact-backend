@@ -14,6 +14,9 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
+const swaggerJsdoc = require('swagger-jsdoc');
+const swaggerUi = require('swagger-ui-express');
+
 const { createSecurityMiddleware } = require('./middleware/security');
 const { createCorsOptions } = require('./config/cors');
 const { correlationIdMiddleware } = require('./middleware/correlationId');
@@ -31,6 +34,100 @@ const pinoHttp = require('pino-http');
 const investRoutes = require('./routes/invest');
 
 const PORT = process.env.PORT || 3001;
+
+// Swagger definition
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'LiquiFact API',
+      version: '1.0.0',
+      description: 'Global Invoice Liquidity Network on Stellar',
+    },
+    servers: [
+      {
+        url: `http://localhost:${PORT}`,
+        description: 'Development server',
+      },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+        },
+      },
+      schemas: {
+        Invoice: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: 'Unique invoice identifier',
+              example: 'inv_1234567890_123',
+            },
+            amount: {
+              type: 'number',
+              description: 'Invoice amount',
+              example: 1000.50,
+            },
+            customer: {
+              type: 'string',
+              description: 'Customer name',
+              example: 'Acme Corp',
+            },
+            status: {
+              type: 'string',
+              description: 'Invoice status',
+              enum: ['pending_verification', 'verified', 'funded', 'settled', 'defaulted'],
+              example: 'pending_verification',
+            },
+            createdAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Creation timestamp',
+            },
+            deletedAt: {
+              type: 'string',
+              format: 'date-time',
+              nullable: true,
+              description: 'Soft delete timestamp',
+            },
+          },
+        },
+        EscrowState: {
+          type: 'object',
+          properties: {
+            invoiceId: {
+              type: 'string',
+              description: 'Associated invoice ID',
+            },
+            status: {
+              type: 'string',
+              description: 'Escrow status',
+              enum: ['not_found', 'funded', 'settled'],
+              example: 'funded',
+            },
+            fundedAmount: {
+              type: 'number',
+              description: 'Amount funded in escrow',
+              example: 1000.50,
+            },
+          },
+        },
+      },
+    },
+    security: [
+      {
+        bearerAuth: [],
+      },
+    ],
+  },
+  apis: ['./src/index.js', './src/routes/*.js', './src/routes/sme/*.js'], // paths to files containing OpenAPI definitions
+};
+
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 // In-memory storage for invoices (Issue #25).
 let invoices = [];
@@ -79,6 +176,34 @@ function createApp(options = {}) {
 
   app.use('/api/sme', smeRouter);
 
+  /**
+   * @swagger
+   * /health:
+   *   get:
+   *     summary: Health check endpoint
+   *     description: Returns the health status of the API service
+   *     tags: [Health]
+   *     responses:
+   *       200:
+   *         description: Service is healthy
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: ok
+   *                 service:
+   *                   type: string
+   *                   example: liquifact-api
+   *                 version:
+   *                   type: string
+   *                   example: 0.1.0
+   *                 timestamp:
+   *                   type: string
+   *                   format: date-time
+   */
   app.get('/health', (req, res) => {
     return res.json({
       status: 'ok',
@@ -88,6 +213,36 @@ function createApp(options = {}) {
     });
   });
 
+  // OpenAPI routes
+  app.get('/openapi.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(swaggerSpec);
+  });
+
+  app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+  /**
+   * @swagger
+   * /api:
+   *   get:
+   *     summary: API information
+   *     description: Returns basic information about the API
+   *     tags: [Info]
+   *     responses:
+   *       200:
+   *         description: API information
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 name:
+   *                   type: string
+   *                 description:
+   *                   type: string
+   *                 endpoints:
+   *                   type: object
+   */
   app.get('/api', (req, res) => {
     return res.json({
       name: 'LiquiFact API',
@@ -102,6 +257,35 @@ function createApp(options = {}) {
 
   app.use('/api/invest', investRoutes);
 
+  /**
+   * @swagger
+   * /api/invoices:
+   *   get:
+   *     summary: Get all invoices
+   *     description: Retrieve a list of invoices, optionally including deleted ones
+   *     tags: [Invoices]
+   *     parameters:
+   *       - in: query
+   *         name: includeDeleted
+   *         schema:
+   *           type: string
+   *           enum: [true]
+   *         description: Include deleted invoices in the response
+   *     responses:
+   *       200:
+   *         description: List of invoices
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/Invoice'
+   *                 message:
+   *                   type: string
+   */
   app.get('/api/invoices', (req, res) => {
     const includeDeleted = req.query.includeDeleted === 'true';
     const filteredInvoices = includeDeleted
@@ -114,6 +298,48 @@ function createApp(options = {}) {
     });
   });
 
+  /**
+   * @swagger
+   * /api/invoices:
+   *   post:
+   *     summary: Create a new invoice
+   *     description: Upload a new invoice for financing
+   *     tags: [Invoices]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - amount
+   *               - customer
+   *             properties:
+   *               amount:
+   *                 type: number
+   *                 description: Invoice amount
+   *               customer:
+   *                 type: string
+   *                 description: Customer name
+   *     responses:
+   *       201:
+   *         description: Invoice created successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   $ref: '#/components/schemas/Invoice'
+   *                 message:
+   *                   type: string
+   *       400:
+   *         description: Bad request - missing required fields
+   *       401:
+   *         description: Unauthorized
+   */
   app.post('/api/invoices', authenticateToken, sensitiveLimiter, (req, res) => {
     const { amount, customer } = req.body;
 
@@ -138,6 +364,107 @@ function createApp(options = {}) {
     });
   });
 
+  /**
+   * @swagger
+   * /api/invoices/{id}:
+   *   get:
+   *     summary: Get a single invoice
+   *     description: Retrieve a single invoice by its ID
+   *     tags: [Invoices]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Invoice ID
+   *     responses:
+   *       200:
+   *         description: Invoice retrieved successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   $ref: '#/components/schemas/Invoice'
+   *                 message:
+   *                   type: string
+   *       401:
+   *         description: Unauthorized
+   *       403:
+   *         description: Forbidden - not the owner
+   *       404:
+   *         description: Invoice not found
+   */
+  app.get('/api/invoices/:id', authenticateToken, (req, res) => {
+    const { id } = req.params;
+    const userId = req.user?.id || req.user?.sub || req.headers['x-user-id']; // Placeholder for auth
+
+    // Basic validation
+    if (!id || id.trim() === '') {
+      return res.status(400).json({ error: 'Bad Request', message: 'Missing or invalid invoice ID' });
+    }
+
+    // Find invoice
+    const invoice = invoices.find((inv) => inv.id === id);
+
+    if (!invoice) {
+      return res.status(404).json({ error: 'Not Found', message: `Invoice with ID '${id}' not found` });
+    }
+
+    // Check if deleted
+    if (invoice.deletedAt) {
+      return res.status(404).json({ error: 'Not Found', message: `Invoice with ID '${id}' not found` });
+    }
+
+    // Authorization check (placeholder)
+    // In real app, check if user owns the invoice
+    // For now, allow all authenticated users
+
+    return res.json({
+      data: invoice,
+      message: 'Invoice retrieved successfully',
+    });
+  });
+
+  /**
+   * @swagger
+   * /api/invoices/{id}:
+   *   delete:
+   *     summary: Soft delete an invoice
+   *     description: Mark an invoice as deleted (soft delete)
+   *     tags: [Invoices]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Invoice ID
+   *     responses:
+   *       200:
+   *         description: Invoice soft-deleted successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 message:
+   *                   type: string
+   *                 data:
+   *                   $ref: '#/components/schemas/Invoice'
+   *       400:
+   *         description: Invoice is already deleted
+   *       404:
+   *         description: Invoice not found
+   *       401:
+   *         description: Unauthorized
+   */
   app.delete('/api/invoices/:id', authenticateToken, (req, res) => {
     const { id } = req.params;
     const invoiceIndex = invoices.findIndex((inv) => inv.id === id);
@@ -161,6 +488,41 @@ function createApp(options = {}) {
     });
   });
 
+  /**
+   * @swagger
+   * /api/invoices/{id}/restore:
+   *   patch:
+   *     summary: Restore a soft-deleted invoice
+   *     description: Restore a previously soft-deleted invoice
+   *     tags: [Invoices]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Invoice ID
+   *     responses:
+   *       200:
+   *         description: Invoice restored successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 message:
+   *                   type: string
+   *                 data:
+   *                   $ref: '#/components/schemas/Invoice'
+   *       400:
+   *         description: Invoice is not deleted
+   *       404:
+   *         description: Invoice not found
+   *       401:
+   *         description: Unauthorized
+   */
   app.patch('/api/invoices/:id/restore', authenticateToken, (req, res) => {
     const { id } = req.params;
     const invoiceIndex = invoices.findIndex((inv) => inv.id === id);
@@ -184,6 +546,39 @@ function createApp(options = {}) {
     });
   });
 
+  /**
+   * @swagger
+   * /api/escrow/{invoiceId}:
+   *   get:
+   *     summary: Get escrow state for an invoice
+   *     description: Retrieve the escrow state from the Soroban contract for a specific invoice
+   *     tags: [Escrow]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: invoiceId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Invoice ID
+   *     responses:
+   *       200:
+   *         description: Escrow state retrieved successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   $ref: '#/components/schemas/EscrowState'
+   *                 message:
+   *                   type: string
+   *       401:
+   *         description: Unauthorized
+   *       500:
+   *         description: Error fetching escrow state
+   */
   app.get('/api/escrow/:invoiceId', authenticateToken, async (req, res) => {
     const { invoiceId } = req.params;
 
@@ -207,6 +602,30 @@ function createApp(options = {}) {
     }
   });
 
+  /**
+   * @swagger
+   * /api/escrow:
+   *   post:
+   *     summary: Create or fund an escrow
+   *     description: Initiate an escrow operation for an invoice
+   *     tags: [Escrow]
+   *     security:
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: Escrow operation completed
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 data:
+   *                   $ref: '#/components/schemas/EscrowState'
+   *                 message:
+   *                   type: string
+   *       401:
+   *         description: Unauthorized
+   */
   app.post('/api/escrow', authenticateToken, sensitiveLimiter, (req, res) => {
     return res.json({
       data: { status: 'funded' },

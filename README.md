@@ -49,11 +49,27 @@ Part of the LiquiFact stack: frontend (Next.js) | backend (this repo) | contract
 
 Default port: `3001`.
 
+---
+
+## API Documentation
+
+The API is documented using OpenAPI 3.0 specification.
+
+- **OpenAPI JSON**: `GET /openapi.json` - Machine-readable API specification
+- **Interactive Docs**: `GET /docs` - Swagger UI for exploring and testing the API
+
+The documentation covers all public endpoints including health checks, invoice management, escrow operations, and investment opportunities.
+
+---
+
 Core routes currently covered:
 
 - Health: `GET /health`
-- Invoices: `GET /api/invoices`
-- Escrow: `GET /api/escrow/:invoiceId`
+- API Info: `GET /api`
+- Invoices: `GET /api/invoices`, `GET /api/invoices/:id`, `POST /api/invoices`, `DELETE /api/invoices/:id`, `PATCH /api/invoices/:id/restore`
+- Escrow: `GET /api/escrow/:invoiceId`, `POST /api/escrow`
+- Investment: `GET /api/invest/opportunities`
+- SME Metrics: `GET /api/sme/metrics`
 
 ---
 
