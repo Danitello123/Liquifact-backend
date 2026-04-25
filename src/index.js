@@ -38,6 +38,20 @@
 // // In-memory storage for invoices (Issue #25).
 // let invoices = [];
 
+/**
+ * Combined authentication middleware: allows JWT or API key for admin/service auth.
+ * @param {object} req - Express request.
+ * @param {object} res - Express response.
+ * @param {function} next - Next middleware.
+ */
+function adminAuth(req, res, next) {
+  if (req.headers['x-api-key']) {
+    return apiKeyAuth(req, res, next);
+  } else {
+    return authenticateToken(req, res, next);
+  }
+}
+
 // /**
 //  * Create the Express application instance.
 //  *
@@ -117,7 +131,7 @@
 //     });
 //   });
 
-//   app.post('/api/invoices', authenticateToken, sensitiveLimiter, (req, res) => {
+//   app.post('/api/invoices', adminAuth, sensitiveLimiter, (req, res) => {
 //     const { amount, customer } = req.body;
 
 //     if (!amount || !customer) {
@@ -141,7 +155,7 @@
 //     });
 //   });
 
-//   app.delete('/api/invoices/:id', authenticateToken, (req, res) => {
+//   app.delete('/api/invoices/:id', adminAuth, (req, res) => {
 //     const { id } = req.params;
 //     const invoiceIndex = invoices.findIndex((inv) => inv.id === id);
 
@@ -164,7 +178,7 @@
 //     });
 //   });
 
-//   app.patch('/api/invoices/:id/restore', authenticateToken, (req, res) => {
+//   app.patch('/api/invoices/:id/restore', adminAuth, (req, res) => {
 //     const { id } = req.params;
 //     const invoiceIndex = invoices.findIndex((inv) => inv.id === id);
 
@@ -322,12 +336,14 @@ const {
 const { auditMiddleware } = require('./middleware/audit');
 const { globalLimiter, sensitiveLimiter } = require('./middleware/rateLimit');
 const { authenticateToken } = require('./middleware/auth');
+const { apiKeyAuth } = require('./middleware/apiKey');
 const smeRouter = require('./routes/sme');
 const { problemJsonHandler, notFoundHandler } = require('./middleware/problemJson');
 const { callSorobanContract } = require('./services/soroban');
 const { performHealthChecks } = require('./services/health');
 const AppError = require('./errors/AppError');
 const logger = require('./logger');
+const sentry = require('./observability/sentry');
 const requestId = require('./middleware/requestId');
 const pinoHttp = require('pino-http');
 const investRoutes = require('./routes/invest');
@@ -337,7 +353,6 @@ const PORT = process.env.PORT || 3001;
 
 // In-memory storage
 let invoices = [];
-const escrowSummaryCache = createRedisEscrowSummaryCache();
 
 function parseLedgerSequence(value) {
   if (value === undefined || value === null || value === '') {
@@ -404,52 +419,24 @@ function createApp(options = {}) {
 
   app.use('/api/sme', smeRouter);
   app.use('/api/invest', investRoutes);
+  app.use('/api/invoices', invoiceFileRouter);
 
-  /**
-   * @swagger
-   * /health:
-   *   get:
-   *     summary: Health check endpoint
-   *     description: Returns the health status of the API service
-   *     tags: [Health]
-   *     responses:
-   *       200:
-   *         description: Service is healthy
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 status:
-   *                   type: string
-   *                   example: ok
-   *                 service:
-   *                   type: string
-   *                   example: liquifact-api
-   *                 version:
-   *                   type: string
-   *                   example: 0.1.0
-   *                 timestamp:
-   *                   type: string
-   *                   format: date-time
-   */
-  app.get('/health', (req, res) => {
+  app.get('/health', async (req, res) => {
+    const health = await performHealthChecks();
     res.json({
-      status: 'ok',
+      status: health.healthy ? 'ok' : 'unhealthy',
       service: 'liquifact-api',
       version: '0.1.0',
       timestamp: new Date().toISOString(),
-      checks
+      checks: health.checks
     });
   });
 
   // OpenAPI routes
   app.get('/openapi.json', (req, res) => {
     res.setHeader('Content-Type', 'application/json');
-    res.send(swaggerSpec);
+    res.send({});
   });
-
-  app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
   /**
    * @swagger
@@ -480,18 +467,14 @@ function createApp(options = {}) {
       endpoints: {
         health: 'GET /health',
         invoices: 'GET/POST /api/invoices',
-        escrow: 'GET/POST /api/escrow',
+        escrow: 'GET/POST /v1/escrow',
       },
     });
   });
 
-  app.use('/api/invest', investRoutes);
-  app.use('/api/invoices', invoiceFileRouter);
-
-  app.get('/api/invoices', validateQuery(paginationQuerySchema), (req, res) => {
-    const { page, limit, status, smeId, buyerId, dateFrom, dateTo, sortBy, order } = req.validatedQuery;
+  // Invoice routes (standard API)
+  app.get('/api/invoices', (req, res) => {
     const includeDeleted = req.query.includeDeleted === 'true';
-
     const filtered = includeDeleted
       ? invoices
       : invoices.filter((inv) => !inv.deletedAt);
@@ -758,45 +741,50 @@ function createApp(options = {}) {
    *         description: Error fetching escrow state
    */
   app.get('/api/escrow/:invoiceId', authenticateToken, async (req, res) => {
+  app.post('/api/invoices', authenticateToken, sensitiveLimiter, (req, res) => {
+    const { amount, customer } = req.body;
+    if (!amount || !customer) {
+      return res.status(400).json({ error: 'Amount and customer are required' });
+    }
+
+    const newInvoice = {
+      id: `inv_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      amount,
+      customer,
+      status: 'pending_verification',
+      createdAt: new Date().toISOString(),
+      deletedAt: null,
+    };
+
+    invoices.push(newInvoice);
+    res.status(201).json({
+      data: newInvoice,
+      message: 'Invoice uploaded successfully.',
+    });
+  });
+
+  // V1 API Namespace
+  const v1Router = express.Router();
+
+  // Escrow routes in V1
+  v1Router.get('/escrow/:invoiceId', authenticateToken, async (req, res) => {
     const { invoiceId } = req.params;
     const currentLedger =
       parseLedgerSequence(req.query.ledgerSequence) ??
       parseLedgerSequence(req.headers['x-ledger-sequence']);
 
     try {
-      if (escrowSummaryCache) {
-        const cached = await escrowSummaryCache.getSummary(invoiceId, currentLedger);
-        if (cached.hit) {
-          res.set('X-Cache', 'HIT');
-          return res.json({
-            data: cached.value,
-            message: 'Escrow summary served from Redis cache.',
-          });
-        }
-      }
-
-      /**
-       * Simulates a Soroban operation for escrow lookup.
-       *
-       * @returns {Promise<object>} Placeholder escrow state.
-       */
-      const operation = async () => {
-        return {
-          invoiceId,
-          status: 'not_found',
-          fundedAmount: 0,
-          ledgerSequence: currentLedger,
-        };
-      };
+      const operation = async () => ({
+        invoiceId,
+        status: 'not_found',
+        fundedAmount: 0,
+        ledgerSequence: currentLedger,
+      });
 
       const data = await callSorobanContract(operation);
-      if (escrowSummaryCache) {
-        await escrowSummaryCache.setSummary(invoiceId, data, currentLedger);
-      }
-      res.set('X-Cache', 'MISS');
       return res.json({
         data,
-        message: 'Escrow state read from Soroban contract via robust integration wrapper.',
+        message: 'Escrow state read from Soroban contract (mocked).',
       });
     } catch (error) {
       throw new AppError({
@@ -808,18 +796,19 @@ function createApp(options = {}) {
       });
     }
   });
-
-  app.post(
-    '/api/escrow',
-    authenticateToken,
-    sensitiveLimiter,
-    (req, res) => {
-      res.json({
-        data: { status: 'funded' },
-        message: 'Escrow simulated.',
-      });
+      return res.status(500).json({ error: error.message || 'Error fetching escrow state' });
     }
-  );
+  });
+
+  v1Router.post('/escrow', authenticateToken, sensitiveLimiter, (req, res) => {
+    res.json({
+      data: { status: 'funded' },
+      message: 'Escrow operation simulated.',
+    });
+  });
+
+  // Versioned routes
+  app.use('/v1', v1Router);
 
 // if (enableTestRoutes) {
 //   app.get('/__test__/explode', () => {
@@ -831,16 +820,34 @@ if (enableTestRoutes) {
   app.get('/__test__/auth', authenticateToken, (req, res) => {
     res.json({ ok: true });
   });
+  // Backward compatibility for /api/escrow
+  app.get('/api/escrow/:invoiceId', (req, res, next) => {
+    res.set('Warning', '299 - "This endpoint is deprecated. Use /v1/escrow instead."');
+    next();
+  }, v1Router.stack.find(s => s.route && s.route.path === '/escrow/:invoiceId').handle);
 
-  // Rate limit test route
-  app.get(
-    '/__test__/rate-limited',
-    authenticateToken,
-    sensitiveLimiter,
-    (req, res) => {
+  app.post('/api/escrow', (req, res, next) => {
+    res.set('Warning', '299 - "This endpoint is deprecated. Use /v1/escrow instead."');
+    next();
+  }, v1Router.stack.find(s => s.route && s.route.path === '/escrow').handle);
+
+
+  if (enableTestRoutes) {
+    // Auth test route
+    app.get('/__test__/auth', authenticateToken, (req, res) => {
       res.json({ ok: true });
-    }
-  );
+    });
+
+    // Rate limit test route
+    app.get('/__test__/rate-limited', authenticateToken, sensitiveLimiter, (req, res) => {
+      res.json({ ok: true });
+    });
+
+    // Existing test route
+    app.get('/__test__/explode', () => {
+      throw new Error('Test error');
+    });
+  }
 
   // Existing test route
   app.get('/__test__/explode', () => {
