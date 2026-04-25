@@ -194,6 +194,11 @@ function createApp() {
         });
       }
 
+      /**
+       * Soroban operation for escrow lookup using resolved contract address.
+       * 
+       * @returns {Promise<object>} Escrow state with contract address
+       */
       const operation = async () => {
         return { 
           invoiceId, 
