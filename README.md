@@ -41,7 +41,11 @@ Part of the LiquiFact stack: frontend (Next.js) | backend (this repo) | contract
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Start API with watch mode |
+| `npm run dev:ts` | Start API with TS runtime (optional) |
 | `npm run start` | Start API |
+| `npm run typecheck` | Run TypeScript type checking (no emit) |
+| `npm run build` | Compile `src/` to `dist/` |
+| `npm run start:dist` | Start compiled output from `dist/` |
 | `npm run lint` | Run ESLint on `src/` |
 | `npm test` | Run load helper tests and structured error tests |
 | `npm run test:coverage` | Run helper/API tests with coverage |
@@ -50,6 +54,8 @@ Part of the LiquiFact stack: frontend (Next.js) | backend (this repo) | contract
 Default port: `3001`.
 Escrow Redis cache is optional and disabled by default; set `REDIS_ESCROW_CACHE_ENABLED=true` with `REDIS_URL` to enable it.
 `REDIS_ESCROW_CACHE_TTL_SECONDS` is strictly clamped to `5..300`, and `REDIS_ESCROW_LEDGER_GAP_THRESHOLD` controls ledger-gap invalidation.
+
+Incremental TypeScript setup and migration guidance lives in `docs/typescript-plan.md`.
 
 Core routes currently covered:
 

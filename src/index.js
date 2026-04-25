@@ -29,7 +29,7 @@ const logger = require('./logger');
 const requestId = require('./middleware/requestId');
 const pinoHttp = require('pino-http');
 const investRoutes = require('./routes/invest');
-const { createRedisEscrowSummaryCache } = require('./cache/redis');
+const invoiceFileRouter = require('./routes/invoiceFile');
 
 const PORT = process.env.PORT || 3001;
 
@@ -114,6 +114,7 @@ function createApp(options = {}) {
   });
 
   app.use('/api/invest', investRoutes);
+  app.use('/api/invoices', invoiceFileRouter);
 
   app.get('/api/invoices', (req, res) => {
     const includeDeleted = req.query.includeDeleted === 'true';

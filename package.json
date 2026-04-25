@@ -6,8 +6,13 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
+    "dev:ts": "node --watch -r ts-node/register/transpile-only src/ts-entry.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:jsdoc": "tsc -p tsconfig.checkjs.json --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "start:dist": "node dist/index.js",
     "test": "jest --runInBand --forceExit",
     "test:coverage": "jest --runInBand --forceExit --coverage"
   },
@@ -46,11 +51,14 @@
   "devDependencies": {
     "autocannon": "^8.0.0",
     "c8": "^11.0.0",
+    "@types/node": "^20.0.0",
     "eslint": "^9.21.0",
     "eslint-plugin-jsdoc": "50.6.3",
     "eslint-plugin-security": "^3.0.1",
     "globals": "^16.0.0",
     "jest": "^30.3.0",
-    "supertest": "^7.0.0"
+    "supertest": "^7.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
   }
 }
