@@ -54,6 +54,68 @@ Core routes currently covered:
 - Health: `GET /health`
 - Invoices: `GET /api/invoices`
 - Escrow: `GET /api/escrow/:invoiceId`
+- Metrics: `GET /metrics` *(Prometheus scrape endpoint — auth required)*
+
+---
+
+## Prometheus metrics
+
+The API exposes a Prometheus-compatible scrape endpoint at `GET /metrics` using [prom-client](https://github.com/siimon/prom-client). Default Node.js process metrics (CPU, memory, event-loop lag, GC, etc.) are collected automatically.
+
+### Auth
+
+Two modes, evaluated in order:
+
+| Condition | Behaviour |
+| --- | --- |
+| `METRICS_BEARER_TOKEN` is set | Require `Authorization: Bearer <token>`. All other requests → 401. |
+| `METRICS_BEARER_TOKEN` is unset | Allow requests from loopback only (`127.0.0.1`, `::1`, `::ffff:127.0.0.1`). All other requests → 401. |
+
+Always set `METRICS_BEARER_TOKEN` in production. The loopback-only fallback is intended for local development and private-network Prometheus scrapers where the token would be redundant.
+
+### Environment variable
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `METRICS_BEARER_TOKEN` | unset | Static bearer token for scraping `/metrics` |
+
+Generate a secure value:
+
+```bash
+openssl rand -hex 32
+```
+
+### curl examples
+
+With token:
+
+```bash
+curl -H "Authorization: Bearer $METRICS_BEARER_TOKEN" http://localhost:3001/metrics
+```
+
+Loopback (no token configured, local dev):
+
+```bash
+curl http://127.0.0.1:3001/metrics
+```
+
+### Prometheus scrape config
+
+```yaml
+scrape_configs:
+  - job_name: liquifact-backend
+    static_configs:
+      - targets: ['localhost:3001']
+    metrics_path: /metrics
+    authorization:
+      credentials: <METRICS_BEARER_TOKEN value>
+```
+
+### Security notes
+
+- The token is a static secret — never commit it to the repo. Use `.env` locally and deployment secrets (e.g., AWS Secrets Manager, Kubernetes Secret) in production.
+- The endpoint is not behind JWT auth; Prometheus scrapers use static tokens, not short-lived JWTs.
+- If `METRICS_BEARER_TOKEN` is unset in production, the endpoint is effectively disabled for all non-loopback clients.
 
 ---
 
