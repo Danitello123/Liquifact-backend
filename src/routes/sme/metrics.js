@@ -28,10 +28,18 @@ function mapStatusToCategory(status) {
   const SETTLED_STATUSES = ['settled', 'paid'];
   const DEFAULTED_STATUSES = ['defaulted'];
 
-  if (OPEN_STATUSES.includes(status)) return 'open';
-  if (FUNDED_STATUSES.includes(status)) return 'funded';
-  if (SETTLED_STATUSES.includes(status)) return 'settled';
-  if (DEFAULTED_STATUSES.includes(status)) return 'defaulted';
+  if (OPEN_STATUSES.includes(status)) {
+    return 'open';
+  }
+  if (FUNDED_STATUSES.includes(status)) {
+    return 'funded';
+  }
+  if (SETTLED_STATUSES.includes(status)) {
+    return 'settled';
+  }
+  if (DEFAULTED_STATUSES.includes(status)) {
+    return 'defaulted';
+  }
   
   return null; // Exclude 'withdrawn' and others
 }
