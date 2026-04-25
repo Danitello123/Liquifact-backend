@@ -322,6 +322,7 @@ const {
 const { auditMiddleware } = require('./middleware/audit');
 const { globalLimiter, sensitiveLimiter } = require('./middleware/rateLimit');
 const { authenticateToken } = require('./middleware/auth');
+const { authorizeSmeWallet, verifyInvoiceOwner } = require('./middleware/smeAuth');
 const smeRouter = require('./routes/sme');
 const errorHandler = require('./middleware/errorHandler');
 const { callSorobanContract } = require('./services/soroban');
@@ -524,6 +525,8 @@ function createApp(options = {}) {
         status: 'pending_verification',
         createdAt: new Date().toISOString(),
         deletedAt: null,
+        ownerId: req.user?.id || req.user?.sub,
+        smeWallet: req.user?.walletAddress || req.headers['x-stellar-address']
       };
 
       invoices.push(newInvoice);
