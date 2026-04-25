@@ -41,81 +41,43 @@ Part of the LiquiFact stack: frontend (Next.js) | backend (this repo) | contract
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Start API with watch mode |
+| `npm run dev:ts` | Start API with TS runtime (optional) |
 | `npm run start` | Start API |
+| `npm run typecheck` | Run TypeScript type checking (no emit) |
+| `npm run build` | Compile `src/` to `dist/` |
+| `npm run start:dist` | Start compiled output from `dist/` |
 | `npm run lint` | Run ESLint on `src/` |
 | `npm test` | Run load helper tests and structured error tests |
 | `npm run test:coverage` | Run helper/API tests with coverage |
 | `npm run load:baseline` | Run the core endpoint load baseline suite |
 
 Default port: `3001`.
+Escrow Redis cache is optional and disabled by default; set `REDIS_ESCROW_CACHE_ENABLED=true` with `REDIS_URL` to enable it.
+`REDIS_ESCROW_CACHE_TTL_SECONDS` is strictly clamped to `5..300`, and `REDIS_ESCROW_LEDGER_GAP_THRESHOLD` controls ledger-gap invalidation.
+
+Incremental TypeScript setup and migration guidance lives in `docs/typescript-plan.md`.
+
+---
+
+## API Documentation
+
+The API is documented using OpenAPI 3.0 specification.
+
+- **OpenAPI JSON**: `GET /openapi.json` - Machine-readable API specification
+- **Interactive Docs**: `GET /docs` - Swagger UI for exploring and testing the API
+
+The documentation covers all public endpoints including health checks, invoice management, escrow operations, and investment opportunities.
+
+---
 
 Core routes currently covered:
 
 - Health: `GET /health`
-- Invoices: `GET /api/invoices`
-- Escrow: `GET /api/escrow/:invoiceId`
-- Metrics: `GET /metrics` *(Prometheus scrape endpoint — auth required)*
-
----
-
-## Prometheus metrics
-
-The API exposes a Prometheus-compatible scrape endpoint at `GET /metrics` using [prom-client](https://github.com/siimon/prom-client). Default Node.js process metrics (CPU, memory, event-loop lag, GC, etc.) are collected automatically.
-
-### Auth
-
-Two modes, evaluated in order:
-
-| Condition | Behaviour |
-| --- | --- |
-| `METRICS_BEARER_TOKEN` is set | Require `Authorization: Bearer <token>`. All other requests → 401. |
-| `METRICS_BEARER_TOKEN` is unset | Allow requests from loopback only (`127.0.0.1`, `::1`, `::ffff:127.0.0.1`). All other requests → 401. |
-
-Always set `METRICS_BEARER_TOKEN` in production. The loopback-only fallback is intended for local development and private-network Prometheus scrapers where the token would be redundant.
-
-### Environment variable
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `METRICS_BEARER_TOKEN` | unset | Static bearer token for scraping `/metrics` |
-
-Generate a secure value:
-
-```bash
-openssl rand -hex 32
-```
-
-### curl examples
-
-With token:
-
-```bash
-curl -H "Authorization: Bearer $METRICS_BEARER_TOKEN" http://localhost:3001/metrics
-```
-
-Loopback (no token configured, local dev):
-
-```bash
-curl http://127.0.0.1:3001/metrics
-```
-
-### Prometheus scrape config
-
-```yaml
-scrape_configs:
-  - job_name: liquifact-backend
-    static_configs:
-      - targets: ['localhost:3001']
-    metrics_path: /metrics
-    authorization:
-      credentials: <METRICS_BEARER_TOKEN value>
-```
-
-### Security notes
-
-- The token is a static secret — never commit it to the repo. Use `.env` locally and deployment secrets (e.g., AWS Secrets Manager, Kubernetes Secret) in production.
-- The endpoint is not behind JWT auth; Prometheus scrapers use static tokens, not short-lived JWTs.
-- If `METRICS_BEARER_TOKEN` is unset in production, the endpoint is effectively disabled for all non-loopback clients.
+- API Info: `GET /api`
+- Invoices: `GET /api/invoices`, `GET /api/invoices/:id`, `POST /api/invoices`, `DELETE /api/invoices/:id`, `PATCH /api/invoices/:id/restore`
+- Escrow: `GET /api/escrow/:invoiceId`, `POST /api/escrow`
+- Investment: `GET /api/invest/opportunities`
+- SME Metrics: `GET /api/sme/metrics`
 
 ---
 
