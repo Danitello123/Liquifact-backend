@@ -348,6 +348,8 @@ const requestId = require('./middleware/requestId');
 const pinoHttp = require('pino-http');
 const investRoutes = require('./routes/invest');
 const invoiceFileRouter = require('./routes/invoiceFile');
+const retentionRoutes = require('./routes/retention');
+const retentionJob = require('./jobs/retentionPurge');
 
 const PORT = process.env.PORT || 3001;
 
@@ -420,6 +422,7 @@ function createApp(options = {}) {
   app.use('/api/sme', smeRouter);
   app.use('/api/invest', investRoutes);
   app.use('/api/invoices', invoiceFileRouter);
+  app.use('/api/retention', retentionRoutes);
 
   app.get('/health', async (req, res) => {
     const health = await performHealthChecks();
@@ -601,6 +604,9 @@ const app = createApp({
 });
 
 function startServer() {
+  // Start retention worker
+  retentionJob.startQueueProcessing();
+  
   return app.listen(PORT, () => {
     logger.warn(`API running at http://localhost:${PORT}`);
   });
