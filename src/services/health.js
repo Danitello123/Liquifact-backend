@@ -55,18 +55,53 @@ async function checkDatabaseHealth() {
 }
 
 /**
+ * Checks escrow reconciliation status.
+ * 
+ * @returns {Promise<{status: string, lastRun?: string, mismatches?: number, error?: string}>} Reconciliation health status.
+ */
+async function checkReconciliationHealth() {
+  try {
+    const { getReconciliationSummary } = require('../jobs/reconcileEscrow');
+    const summary = getReconciliationSummary();
+
+    if (!summary) {
+      return { status: 'not_run', error: 'Reconciliation has not been run yet' };
+    }
+
+    const lastRun = new Date(summary.reconciledAt);
+    const hoursSinceLastRun = (Date.now() - lastRun.getTime()) / (1000 * 60 * 60);
+
+    // Consider unhealthy if last run was more than 25 hours ago (allowing 1 hour grace)
+    if (hoursSinceLastRun > 25) {
+      return { status: 'stale', lastRun: summary.reconciledAt, error: 'Reconciliation not run recently' };
+    }
+
+    // Unhealthy if there are mismatches
+    if (summary.mismatches > 0) {
+      return { status: 'mismatches', lastRun: summary.reconciledAt, mismatches: summary.mismatches };
+    }
+
+    return { status: 'healthy', lastRun: summary.reconciledAt };
+  } catch (error) {
+    return { status: 'error', error: error.message };
+  }
+}
+
+/**
  * Performs all dependency health checks.
  * 
  * @returns {Promise<{healthy: boolean, checks: Object}>} Aggregated health status.
  */
 async function performHealthChecks() {
-  const [soroban, database] = await Promise.all([
+  const [soroban, database, reconciliation] = await Promise.all([
     checkSorobanHealth(),
-    checkDatabaseHealth()
+    checkDatabaseHealth(),
+    checkReconciliationHealth()
   ]);
 
-  const checks = { soroban, database };
-  const healthy = soroban.status === 'healthy' || soroban.status === 'unknown';
+  const checks = { soroban, database, reconciliation };
+  const healthy = (soroban.status === 'healthy' || soroban.status === 'unknown') &&
+                  reconciliation.status === 'healthy';
 
   return { healthy, checks };
 }
@@ -74,5 +109,6 @@ async function performHealthChecks() {
 module.exports = {
   checkSorobanHealth,
   checkDatabaseHealth,
+  checkReconciliationHealth,
   performHealthChecks
 };
