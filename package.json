@@ -14,7 +14,9 @@
     "build": "tsc -p tsconfig.build.json",
     "start:dist": "node dist/index.js",
     "test": "jest --runInBand --forceExit",
-    "test:coverage": "jest --runInBand --forceExit --coverage"
+    "test:coverage": "jest --runInBand --forceExit --coverage",
+    "test:e2e": "jest tests/e2e/smoke.test.js --runInBand",
+    "e2e:api": "node e2e-runner.js"
   },
   "keywords": [],
   "author": "",
