@@ -16,7 +16,7 @@ describe('Rate Limiting Middleware', () => {
     const response = await request(app)
       .post('/api/invoices')
       .set('Authorization', `Bearer ${validToken}`)
-      .send({ amount: 100, customer: 'Rate Test Corp' });
+      .send({ amount: 100, buyer: 'Rate Test Buyer', seller: 'Rate Test Seller', dueDate: '2025-12-31', currency: 'USD' });
     expect(response.status).toBe(201);
   });
 });

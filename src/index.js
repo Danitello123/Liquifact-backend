@@ -29,6 +29,12 @@ const logger = require('./logger');
 const requestId = require('./middleware/requestId');
 const pinoHttp = require('pino-http');
 const investRoutes = require('./routes/invest');
+const {
+  invoiceCreateSchema,
+  paginationQuerySchema,
+  validateBody,
+  validateQuery,
+} = require('./schemas/invoice');
 
 const PORT = process.env.PORT || 3001;
 
@@ -102,29 +108,71 @@ function createApp(options = {}) {
 
   app.use('/api/invest', investRoutes);
 
-  app.get('/api/invoices', (req, res) => {
+  app.get('/api/invoices', validateQuery(paginationQuerySchema), (req, res) => {
+    const { page, limit, status, smeId, buyerId, dateFrom, dateTo, sortBy, order } = req.validatedQuery;
     const includeDeleted = req.query.includeDeleted === 'true';
-    const filteredInvoices = includeDeleted
+    
+    let filteredInvoices = includeDeleted
       ? invoices
       : invoices.filter((inv) => !inv.deletedAt);
 
+    if (status) {
+      filteredInvoices = filteredInvoices.filter((inv) => inv.status === status);
+    }
+    if (smeId) {
+      filteredInvoices = filteredInvoices.filter((inv) => inv.smeId === smeId);
+    }
+    if (buyerId) {
+      filteredInvoices = filteredInvoices.filter((inv) => inv.buyerId === buyerId);
+    }
+    if (dateFrom) {
+      filteredInvoices = filteredInvoices.filter((inv) => inv.createdAt >= dateFrom);
+    }
+    if (dateTo) {
+      filteredInvoices = filteredInvoices.filter((inv) => inv.createdAt <= dateTo);
+    }
+
+    if (sortBy) {
+      filteredInvoices.sort((a, b) => {
+        const aVal = a[sortBy] ?? 0;
+        const bVal = b[sortBy] ?? 0;
+        if (order === 'desc') {
+          return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
+        }
+        return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+      });
+    }
+
+    const pageNum = page || 1;
+    const limitNum = limit || 20;
+    const startIndex = (pageNum - 1) * limitNum;
+    const endIndex = startIndex + limitNum;
+    const paginatedInvoices = filteredInvoices.slice(startIndex, endIndex);
+
     return res.json({
-      data: filteredInvoices,
+      data: paginatedInvoices,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: filteredInvoices.length,
+        totalPages: Math.ceil(filteredInvoices.length / limitNum),
+      },
       message: includeDeleted ? 'Showing all invoices (including deleted).' : 'Showing active invoices.',
     });
   });
 
-  app.post('/api/invoices', authenticateToken, sensitiveLimiter, (req, res) => {
-    const { amount, customer } = req.body;
-
-    if (!amount || !customer) {
-      return res.status(400).json({ error: 'Amount and customer are required' });
-    }
+  app.post('/api/invoices', authenticateToken, sensitiveLimiter, validateBody(invoiceCreateSchema), (req, res) => {
+    const { amount, buyer, seller, dueDate, currency, description, invoiceNumber } = req.validated;
 
     const newInvoice = {
       id: `inv_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
       amount,
-      customer,
+      buyer,
+      seller,
+      dueDate,
+      currency: currency.toUpperCase(),
+      description,
+      invoiceNumber,
       status: 'pending_verification',
       createdAt: new Date().toISOString(),
       deletedAt: null,
