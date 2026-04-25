@@ -115,6 +115,36 @@ function createApp(options = {}) {
     });
   });
 
+  // OpenAPI routes
+  app.get('/openapi.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(swaggerSpec);
+  });
+
+  app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+  /**
+   * @swagger
+   * /api:
+   *   get:
+   *     summary: API information
+   *     description: Returns basic information about the API
+   *     tags: [Info]
+   *     responses:
+   *       200:
+   *         description: API information
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 name:
+   *                   type: string
+   *                 description:
+   *                   type: string
+   *                 endpoints:
+   *                   type: object
+   */
   app.get('/api', (req, res) => {
     res.json({
       name: 'LiquiFact API',

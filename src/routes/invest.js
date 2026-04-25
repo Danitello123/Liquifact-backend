@@ -12,9 +12,56 @@ const { authenticateToken } = require('../middleware/auth');
 const logger = require('../logger');
 
 /**
- * @route GET /api/invest/opportunities
- * @desc Get a paginated list of investable opportunities from the projection DB.
- * @access Private (Investors)
+ * @swagger
+ * /api/invest/opportunities:
+ *   get:
+ *     summary: Get investment opportunities
+ *     description: Retrieve a paginated list of investable opportunities
+ *     tags: [Invest]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 10
+ *         description: Number of items per page
+ *     responses:
+ *       200:
+ *         description: Investment opportunities retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     description: Investment opportunity object
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                 message:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized
  */
 router.get('/opportunities', authenticateToken, async (req, res, next) => {
   try {

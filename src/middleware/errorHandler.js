@@ -52,7 +52,7 @@ function errorHandler(error, req, res, _next) {
  * Log the error with correlation context without exposing internals to clients.
  *
  * @param {unknown} error Thrown error value.
- * @param {string} correlationId Request correlation ID.
+ * @param {string} requestId Request correlation ID.
  * @returns {void}
  */
 function logError(error, requestId) {
