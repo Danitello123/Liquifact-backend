@@ -323,7 +323,7 @@ const { auditMiddleware } = require('./middleware/audit');
 const { globalLimiter, sensitiveLimiter } = require('./middleware/rateLimit');
 const { authenticateToken } = require('./middleware/auth');
 const smeRouter = require('./routes/sme');
-const errorHandler = require('./middleware/errorHandler');
+const { problemJsonHandler, notFoundHandler } = require('./middleware/problemJson');
 const { callSorobanContract } = require('./services/soroban');
 const { performHealthChecks } = require('./services/health');
 const AppError = require('./errors/AppError');
@@ -512,9 +512,13 @@ function createApp(options = {}) {
       const { amount, customer } = req.body;
 
       if (!amount || !customer) {
-        return res
-          .status(400)
-          .json({ error: 'Amount and customer are required' });
+        throw new AppError({
+          type: 'https://liquifact.com/probs/validation-error',
+          title: 'Validation Error',
+          status: 400,
+          detail: 'Amount and customer are required fields',
+          instance: req.originalUrl,
+        });
       }
 
       const newInvoice = {
@@ -576,19 +580,37 @@ function createApp(options = {}) {
 
     // Basic validation
     if (!id || id.trim() === '') {
-      return res.status(400).json({ error: 'Bad Request', message: 'Missing or invalid invoice ID' });
+      throw new AppError({
+        type: 'https://liquifact.com/probs/validation-error',
+        title: 'Validation Error',
+        status: 400,
+        detail: 'Missing or invalid invoice ID',
+        instance: req.originalUrl,
+      });
     }
 
     // Find invoice
     const invoice = invoices.find((inv) => inv.id === id);
 
     if (!invoice) {
-      return res.status(404).json({ error: 'Not Found', message: `Invoice with ID '${id}' not found` });
+      throw new AppError({
+        type: 'https://liquifact.com/probs/not-found',
+        title: 'Invoice Not Found',
+        status: 404,
+        detail: `Invoice with ID '${id}' not found`,
+        instance: req.originalUrl,
+      });
     }
 
     // Check if deleted
     if (invoice.deletedAt) {
-      return res.status(404).json({ error: 'Not Found', message: `Invoice with ID '${id}' not found` });
+      throw new AppError({
+        type: 'https://liquifact.com/probs/not-found',
+        title: 'Invoice Not Found',
+        status: 404,
+        detail: `Invoice with ID '${id}' not found`,
+        instance: req.originalUrl,
+      });
     }
 
     // Authorization check (placeholder)
@@ -640,13 +662,23 @@ function createApp(options = {}) {
     const invoice = invoices.find((inv) => inv.id === req.params.id);
 
     if (!invoice) {
-      return res.status(404).json({ error: 'Invoice not found' });
+      throw new AppError({
+        type: 'https://liquifact.com/probs/not-found',
+        title: 'Invoice Not Found',
+        status: 404,
+        detail: `Invoice with ID '${req.params.id}' not found`,
+        instance: req.originalUrl,
+      });
     }
 
     if (invoice.deletedAt) {
-      return res
-        .status(400)
-        .json({ error: 'Invoice is already deleted' });
+      throw new AppError({
+        type: 'https://liquifact.com/probs/conflict',
+        title: 'Conflict',
+        status: 400,
+        detail: 'Invoice is already deleted',
+        instance: req.originalUrl,
+      });
     }
 
     invoice.deletedAt = new Date().toISOString();
@@ -664,14 +696,33 @@ function createApp(options = {}) {
       const invoice = invoices.find((inv) => inv.id === req.params.id);
 
       if (!invoice) {
-        return res.status(404).json({ error: 'Invoice not found' });
+        throw new AppError({
+          type: 'https://liquifact.com/probs/not-found',
+          title: 'Invoice Not Found',
+          status: 404,
+          detail: `Invoice with ID '${req.params.id}' not found`,
+          instance: req.originalUrl,
+        });
       }
 
       if (!invoice.deletedAt) {
-        return res
-          .status(400)
-          .json({ error: 'Invoice is not deleted' });
+        throw new AppError({
+          type: 'https://liquifact.com/probs/conflict',
+          title: 'Conflict',
+          status: 400,
+          detail: 'Invoice is not deleted',
+          instance: req.originalUrl,
+        });
       }
+
+      invoice.deletedAt = null;
+
+      return res.status(200).json({
+        message: 'Invoice restored successfully.',
+        data: invoice,
+      });
+    }
+  );
 
   /**
    * @swagger
@@ -747,31 +798,16 @@ function createApp(options = {}) {
         data,
         message: 'Escrow state read from Soroban contract via robust integration wrapper.',
       });
+    } catch (error) {
+      throw new AppError({
+        type: 'https://liquifact.com/probs/service-unavailable',
+        title: 'Service Unavailable',
+        status: 503,
+        detail: 'Error fetching escrow state',
+        instance: req.originalUrl,
+      });
     }
-  );
-
-  app.get(
-    '/api/escrow/:invoiceId',
-    authenticateToken,
-    async (req, res) => {
-      try {
-        const data = await callSorobanContract(async () => ({
-          invoiceId: req.params.invoiceId,
-          status: 'not_found',
-          fundedAmount: 0,
-        }));
-
-        res.json({
-          data,
-          message: 'Escrow state fetched.',
-        });
-      } catch (err) {
-        res.status(500).json({
-          error: err.message || 'Escrow fetch error',
-        });
-      }
-    }
-  );
+  });
 
   app.post(
     '/api/escrow',
@@ -785,11 +821,11 @@ function createApp(options = {}) {
     }
   );
 
-  // if (enableTestRoutes) {
-  //   app.get('/__test__/explode', () => {
-  //     throw new Error('Test error');
-  //   });
-  // }
+// if (enableTestRoutes) {
+//   app.get('/__test__/explode', () => {
+//     throw new Error('Test error');
+//   });
+// }
 if (enableTestRoutes) {
   // Auth test route
   app.get('/__test__/auth', authenticateToken, (req, res) => {
@@ -811,6 +847,7 @@ if (enableTestRoutes) {
     throw new Error('Test error');
   });
 }
+
   // ───────── ERRORS ─────────
 
   app.use(payloadTooLargeHandler);
@@ -826,17 +863,17 @@ if (enableTestRoutes) {
     );
   });
 
-  app.use(errorHandler);
+  app.use(problemJsonHandler);
 
   return app;
 }
 
-const app = createApp({
+const appInstance = createApp({
   enableTestRoutes: process.env.NODE_ENV === 'test',
 });
 
 function startServer() {
-  return app.listen(PORT, () => {
+  return appInstance.listen(PORT, () => {
     logger.warn(`API running at http://localhost:${PORT}`);
   });
 }
@@ -849,7 +886,7 @@ if (process.env.NODE_ENV !== 'test') {
   startServer();
 }
 
-module.exports = app;
+module.exports = appInstance;
 module.exports.createApp = createApp;
 module.exports.startServer = startServer;
 module.exports.resetStore = resetStore;
