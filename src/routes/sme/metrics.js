@@ -45,8 +45,42 @@ function mapStatusToCategory(status) {
 }
 
 /**
- * GET /api/sme/metrics
- * Returns aggregated invoice metrics for the authenticated user.
+ * @swagger
+ * /api/sme/metrics:
+ *   get:
+ *     summary: Get SME dashboard metrics
+ *     description: Returns aggregated invoice metrics for the authenticated SME user
+ *     tags: [SME]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Metrics retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     open:
+ *                       type: integer
+ *                       description: Number of open invoices
+ *                     funded:
+ *                       type: integer
+ *                       description: Number of funded invoices
+ *                     settled:
+ *                       type: integer
+ *                       description: Number of settled invoices
+ *                     defaulted:
+ *                       type: integer
+ *                       description: Number of defaulted invoices
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       401:
+ *         description: Unauthorized
  */
 router.get('/metrics', authenticateToken, (req, res) => {
   const userId = req.user.id || req.user.sub;

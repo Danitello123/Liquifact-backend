@@ -41,19 +41,43 @@ Part of the LiquiFact stack: frontend (Next.js) | backend (this repo) | contract
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Start API with watch mode |
+| `npm run dev:ts` | Start API with TS runtime (optional) |
 | `npm run start` | Start API |
+| `npm run typecheck` | Run TypeScript type checking (no emit) |
+| `npm run build` | Compile `src/` to `dist/` |
+| `npm run start:dist` | Start compiled output from `dist/` |
 | `npm run lint` | Run ESLint on `src/` |
 | `npm test` | Run load helper tests and structured error tests |
 | `npm run test:coverage` | Run helper/API tests with coverage |
 | `npm run load:baseline` | Run the core endpoint load baseline suite |
 
 Default port: `3001`.
+Escrow Redis cache is optional and disabled by default; set `REDIS_ESCROW_CACHE_ENABLED=true` with `REDIS_URL` to enable it.
+`REDIS_ESCROW_CACHE_TTL_SECONDS` is strictly clamped to `5..300`, and `REDIS_ESCROW_LEDGER_GAP_THRESHOLD` controls ledger-gap invalidation.
+
+Incremental TypeScript setup and migration guidance lives in `docs/typescript-plan.md`.
+
+---
+
+## API Documentation
+
+The API is documented using OpenAPI 3.0 specification.
+
+- **OpenAPI JSON**: `GET /openapi.json` - Machine-readable API specification
+- **Interactive Docs**: `GET /docs` - Swagger UI for exploring and testing the API
+
+The documentation covers all public endpoints including health checks, invoice management, escrow operations, and investment opportunities.
+
+---
 
 Core routes currently covered:
 
 - Health: `GET /health`
-- Invoices: `GET /api/invoices`
-- Escrow: `GET /api/escrow/:invoiceId`
+- API Info: `GET /api`
+- Invoices: `GET /api/invoices`, `GET /api/invoices/:id`, `POST /api/invoices`, `DELETE /api/invoices/:id`, `PATCH /api/invoices/:id/restore`
+- Escrow: `GET /api/escrow/:invoiceId`, `POST /api/escrow`
+- Investment: `GET /api/invest/opportunities`
+- SME Metrics: `GET /api/sme/metrics`
 
 ---
 
