@@ -341,6 +341,10 @@ const smeRouter = require('./routes/sme');
 const errorHandler = require('./middleware/errorHandler');
 const { callSorobanContract } = require('./services/soroban');
 const { performHealthChecks } = require('./services/health');
+const { readEscrowState, fetchLegalHold } = require('./services/escrowRead');
+const { submitEscrowFunding } = require('./services/escrowSubmit');
+const { legalHoldGate } = require('./middleware/legalHoldGate');
+const { validateBody, validateQuery, invoiceCreateSchema, paginationQuerySchema } = require('./schemas/invoice');
 const AppError = require('./errors/AppError');
 const logger = require('./logger');
 const sentry = require('./observability/sentry');
@@ -425,19 +429,54 @@ function createApp(options = {}) {
 
   app.get('/health', async (req, res) => {
     const health = await performHealthChecks();
-    res.json({
-      status: health.healthy ? 'ok' : 'unhealthy',
+    const status = health.healthy ? 200 : 503;
+    res.status(status).json({
+      status: health.healthy ? 'ok' : 'error',
       service: 'liquifact-api',
       version: '0.1.0',
       timestamp: new Date().toISOString(),
-      checks: health.checks
+      checks: health.checks,
     });
   });
 
   // OpenAPI routes
   app.get('/openapi.json', (req, res) => {
     res.setHeader('Content-Type', 'application/json');
-    res.send({});
+    res.json({
+      openapi: '3.0.0',
+      info: { title: 'LiquiFact API', version: '1.0.0', description: 'Global Invoice Liquidity Network on Stellar' },
+      servers: [{ url: '/v1' }, { url: '/' }],
+      components: {
+        schemas: {
+          Invoice: { type: 'object', properties: { id: { type: 'string' }, amount: { type: 'number' } } },
+          EscrowState: { type: 'object', properties: { invoiceId: { type: 'string' }, status: { type: 'string' }, legal_hold: { type: 'boolean' } } },
+        },
+        securitySchemes: {
+          bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+        },
+      },
+      paths: {
+        '/health': { get: { summary: 'Health check', responses: { '200': { description: 'OK' } } } },
+        '/api': { get: { summary: 'API info', responses: { '200': { description: 'OK' } } } },
+        '/api/invoices': { get: { summary: 'List invoices', responses: { '200': { description: 'OK' } } }, post: { summary: 'Create invoice', security: [{ bearerAuth: [] }], responses: { '201': { description: 'Created' } } } },
+        '/api/invoices/{id}': { delete: { summary: 'Delete invoice', security: [{ bearerAuth: [] }], responses: { '200': { description: 'OK' } } }, patch: { summary: 'Restore invoice', security: [{ bearerAuth: [] }], responses: { '200': { description: 'OK' } } } },
+        '/api/escrow/{invoiceId}': { get: { summary: 'Get escrow state', security: [{ bearerAuth: [] }], responses: { '200': { description: 'OK' } } } },
+        '/api/escrow': { post: { summary: 'Fund escrow', security: [{ bearerAuth: [] }], responses: { '202': { description: 'Accepted' } } } },
+        '/api/invest/opportunities': { get: { summary: 'Investment opportunities', security: [{ bearerAuth: [] }], responses: { '200': { description: 'OK' } } } },
+        '/api/sme/metrics': { get: { summary: 'SME metrics', security: [{ bearerAuth: [] }], responses: { '200': { description: 'OK' } } } },
+      },
+    });
+  });
+
+  app.get('/docs', (req, res) => {
+    res.setHeader('Content-Type', 'text/html');
+    res.send(`<!DOCTYPE html><html><head><title>LiquiFact API Docs</title>
+<link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist/swagger-ui.css">
+</head><body>
+<div id="swagger-ui"></div>
+<script src="https://unpkg.com/swagger-ui-dist/swagger-ui-bundle.js"></script>
+<script>SwaggerUIBundle({ url: '/openapi.json', dom_id: '#swagger-ui' });</script>
+</body></html>`);
   });
 
   /**
@@ -475,22 +514,56 @@ function createApp(options = {}) {
   });
 
   // Invoice routes (standard API)
-  app.get('/api/invoices', (req, res) => {
+  app.get('/api/invoices', validateQuery(paginationQuerySchema), (req, res) => {
     const includeDeleted = req.query.includeDeleted === 'true';
     const filtered = includeDeleted
       ? invoices
       : invoices.filter((inv) => !inv.deletedAt);
 
+    const q = req.validatedQuery || {};
+    const page = q.page || 1;
+    const limit = q.limit || 20;
+
     res.json({
       data: filtered,
+      pagination: {
+        page,
+        limit,
+        total: filtered.length,
+        totalPages: Math.ceil(filtered.length / limit),
+      },
       message: includeDeleted
         ? 'Showing all invoices (including deleted).'
         : 'Showing active invoices.',
     });
   });
 
-  app.post('/api/invoices', authenticateToken, sensitiveLimiter, (req, res) => {
-    const { amount, customer } = req.body;
+  app.post('/api/invoices', authenticateToken, sensitiveLimiter, (req, res, next) => {
+    const body = req.body || {};
+    const { amount, customer, buyer, seller, dueDate, currency } = body;
+
+    // Use strict validation when new-style fields present, or body is completely empty
+    const hasNewStyleFields = buyer !== undefined || seller !== undefined || dueDate !== undefined || currency !== undefined;
+    const isEmptyBody = Object.keys(body).length === 0;
+    const isNewStyle = hasNewStyleFields || isEmptyBody;
+
+    if (isNewStyle) {
+      return validateBody(invoiceCreateSchema)(req, res, () => {
+        const validated = req.validated || body;
+        const newInvoice = {
+          id: `inv_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+          status: 'pending_verification',
+          createdAt: new Date().toISOString(),
+          deletedAt: null,
+          ...validated,
+          customer: validated.customer || validated.buyer,
+        };
+        invoices.push(newInvoice);
+        return res.status(201).json({ data: newInvoice, message: 'Invoice uploaded successfully.' });
+      });
+    }
+
+    // Old-style payload (amount + customer)
     if (!amount || !customer) {
       return res.status(400).json({ error: 'Amount and customer are required' });
     }
@@ -505,44 +578,89 @@ function createApp(options = {}) {
     };
 
     invoices.push(newInvoice);
-    res.status(201).json({
-      data: newInvoice,
-      message: 'Invoice uploaded successfully.',
-    });
+    return res.status(201).json({ data: newInvoice, message: 'Invoice uploaded successfully.' });
+  });
+
+  app.delete('/api/invoices/:id', authenticateToken, (req, res) => {
+    const { id } = req.params;
+    const idx = invoices.findIndex((inv) => inv.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+    if (invoices[idx].deletedAt) {
+      return res.status(400).json({ error: 'Invoice is already deleted' });
+    }
+    invoices[idx].deletedAt = new Date().toISOString();
+    return res.json({ message: 'Invoice soft-deleted successfully.', data: invoices[idx] });
+  });
+
+  app.patch('/api/invoices/:id/restore', authenticateToken, (req, res) => {
+    const { id } = req.params;
+    const idx = invoices.findIndex((inv) => inv.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+    if (!invoices[idx].deletedAt) {
+      return res.status(400).json({ error: 'Invoice is not deleted' });
+    }
+    invoices[idx].deletedAt = null;
+    return res.status(200).json({ message: 'Invoice restored successfully.', data: invoices[idx] });
   });
 
   // V1 API Namespace
   const v1Router = express.Router();
 
-  // Escrow routes in V1
-  v1Router.get('/escrow/:invoiceId', authenticateToken, async (req, res) => {
+  // Escrow read — uses readEscrowState with legal_hold
+  v1Router.get('/escrow/:invoiceId', authenticateToken, async (req, res, next) => {
     const { invoiceId } = req.params;
-    const currentLedger =
-      parseLedgerSequence(req.query.ledgerSequence) ??
-      parseLedgerSequence(req.headers['x-ledger-sequence']);
-
     try {
-      const operation = async () => ({
-        invoiceId,
-        status: 'not_found',
-        fundedAmount: 0,
-        ledgerSequence: currentLedger,
-      });
-
-      const data = await callSorobanContract(operation);
+      const data = await readEscrowState(invoiceId);
       return res.json({
         data,
         message: 'Escrow state read from Soroban contract (mocked).',
       });
-    } catch (error) {
-      return res.status(500).json({ error: error.message || 'Error fetching escrow state' });
+    } catch (err) {
+      if (err.status === 400) {
+        return res.status(400).json({ error: err.message });
+      }
+      return next(err);
     }
   });
 
-  v1Router.post('/escrow', authenticateToken, sensitiveLimiter, (req, res) => {
-    res.json({
+  // POST /v1/escrow — funding intent (202)
+  v1Router.post('/escrow', authenticateToken, sensitiveLimiter, async (req, res, next) => {
+    const idempotencyKey = req.headers['idempotency-key'] || req.headers['Idempotency-Key'];
+    try {
+      const result = await submitEscrowFunding(req.body, {
+        env: process.env,
+        idempotencyKey,
+        userId: req.user && req.user.id,
+        now: new Date(),
+      });
+      return res.status(202).json({
+        data: result,
+        message: 'Escrow funding transaction prepared; no live transaction was signed or submitted.',
+      });
+    } catch (err) {
+      if (err.status === 400) {
+        return res.status(400).json({
+          error: {
+            code: err.code || 'VALIDATION_ERROR',
+            message: err.detail || err.message,
+            retryable: false,
+            retry_hint: 'Fix the escrow funding payload and try again.',
+          },
+        });
+      }
+      return next(err);
+    }
+  });
+
+  // POST /v1/escrow/:invoiceId/fund — legal-hold gated funding
+  v1Router.post('/escrow/:invoiceId/fund', authenticateToken, legalHoldGate(), async (req, res) => {
+    return res.json({
       data: { status: 'funded' },
-      message: 'Escrow operation simulated.',
+      message: 'Escrow funded.',
     });
   });
 
@@ -555,10 +673,79 @@ function createApp(options = {}) {
     next();
   }, v1Router.stack.find(s => s.route && s.route.path === '/escrow/:invoiceId').handle);
 
-  app.post('/api/escrow', (req, res, next) => {
-    res.set('Warning', '299 - "This endpoint is deprecated. Use /v1/escrow instead."');
+  app.post('/api/escrow/:invoiceId/fund', (req, res, next) => {
     next();
-  }, v1Router.stack.find(s => s.route && s.route.path === '/escrow').handle);
+  }, v1Router.stack.find(s => s.route && s.route.path === '/escrow/:invoiceId/fund').handle);
+
+  // Legacy POST /api/escrow — gates on body.invoiceId if present
+  app.post('/api/escrow', authenticateToken, sensitiveLimiter, async (req, res, next) => {
+    res.set('Warning', '299 - "This endpoint is deprecated. Use /v1/escrow instead."');
+    const body = req.body || {};
+    const invoiceId = body.invoiceId;
+
+    // If full funding payload (has funderPublicKey), delegate to submitEscrowFunding
+    if (body.funderPublicKey) {
+      const idempotencyKey = req.headers['idempotency-key'] || req.headers['Idempotency-Key'];
+      try {
+        const result = await submitEscrowFunding(body, {
+          env: process.env,
+          idempotencyKey,
+          userId: req.user && req.user.id,
+          now: new Date(),
+        });
+        return res.status(202).json({
+          data: result,
+          message: 'Escrow funding transaction prepared; no live transaction was signed or submitted.',
+        });
+      } catch (err) {
+        if (err.status === 400) {
+          return res.status(400).json({
+            error: {
+              code: err.code || 'VALIDATION_ERROR',
+              message: err.detail || err.message,
+              retryable: false,
+              retry_hint: 'Fix the escrow funding payload and try again.',
+            },
+          });
+        }
+        return next(err);
+      }
+    }
+
+    // Simple payload — gate on legal hold if invoiceId present
+    if (invoiceId) {
+      // Validate invoiceId format
+      const INVOICE_ID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
+      if (!INVOICE_ID_RE.test(invoiceId)) {
+        return res.status(400).json({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'invoiceId contains unsupported characters.',
+            retryable: false,
+            retry_hint: 'Fix the escrow funding payload and try again.',
+          },
+        });
+      }
+      try {
+        const held = await fetchLegalHold(invoiceId);
+        if (held) {
+          return res.status(502).json({ error: 'Escrow is under legal hold' });
+        }
+      } catch (err) {
+        return next(err);
+      }
+    }
+
+    return res.json({
+      data: { status: 'funded' },
+      message: 'Escrow operation simulated.',
+    });
+  });
+
+  // Error test trigger
+  app.get('/error-test-trigger', (req, res, next) => {
+    next(new Error('Simulated server error'));
+  });
 
 
   if (enableTestRoutes) {
