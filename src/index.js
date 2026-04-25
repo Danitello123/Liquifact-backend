@@ -343,6 +343,7 @@ const { callSorobanContract } = require('./services/soroban');
 const { performHealthChecks } = require('./services/health');
 const AppError = require('./errors/AppError');
 const logger = require('./logger');
+const sentry = require('./observability/sentry');
 const requestId = require('./middleware/requestId');
 const pinoHttp = require('pino-http');
 const investRoutes = require('./routes/invest');
