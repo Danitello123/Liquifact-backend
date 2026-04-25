@@ -107,6 +107,7 @@ function getCurrentEnvironment() {
     const config = getConfig();
     return config.NODE_ENV || 'development';
   } catch (error) {
+    // Config not validated, fall back to environment variable
     return process.env.NODE_ENV || 'development';
   }
 }
