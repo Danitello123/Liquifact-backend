@@ -29,6 +29,7 @@ const logger = require('./logger');
 const requestId = require('./middleware/requestId');
 const pinoHttp = require('pino-http');
 const investRoutes = require('./routes/invest');
+const { submitEscrowFunding } = require('./services/escrowSubmit');
 
 const PORT = process.env.PORT || 3001;
 
@@ -51,8 +52,12 @@ function createApp(options = {}) {
     logger,
     genReqId: (req) => req.id,
     customLogLevel: (req, res, err) => {
-      if (res.statusCode >= 500 || err) return 'error';
-      if (res.statusCode >= 400) return 'warn';
+      if (res.statusCode >= 500 || err) {
+        return 'error';
+      }
+      if (res.statusCode >= 400) {
+        return 'warn';
+      }
       return 'info';
     },
     serializers: {
@@ -207,11 +212,22 @@ function createApp(options = {}) {
     }
   });
 
-  app.post('/api/escrow', authenticateToken, sensitiveLimiter, (req, res) => {
-    return res.json({
-      data: { status: 'funded' },
-      message: 'Escrow operation simulated.',
-    });
+  app.post('/api/escrow', authenticateToken, sensitiveLimiter, async (req, res, next) => {
+    try {
+      const data = await submitEscrowFunding(req.body, {
+        env: process.env,
+        idempotencyKey: req.get('Idempotency-Key'),
+        now: new Date(),
+        userId: req.user && req.user.id,
+      });
+
+      return res.status(202).json({
+        data,
+        message: 'Escrow funding transaction prepared; no live transaction was signed or submitted.',
+      });
+    } catch (error) {
+      return next(error);
+    }
   });
 
   app.get('/error-test-trigger', (req, res, next) => {
