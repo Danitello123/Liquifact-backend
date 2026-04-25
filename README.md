@@ -41,13 +41,19 @@ Part of the LiquiFact stack: frontend (Next.js) | backend (this repo) | contract
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Start API with watch mode |
+| `npm run dev:ts` | Start API with TS runtime (optional) |
 | `npm run start` | Start API |
+| `npm run typecheck` | Run TypeScript type checking (no emit) |
+| `npm run build` | Compile `src/` to `dist/` |
+| `npm run start:dist` | Start compiled output from `dist/` |
 | `npm run lint` | Run ESLint on `src/` |
 | `npm test` | Run load helper tests and structured error tests |
 | `npm run test:coverage` | Run helper/API tests with coverage |
 | `npm run load:baseline` | Run the core endpoint load baseline suite |
 
 Default port: `3001`.
+
+Incremental TypeScript setup and migration guidance lives in `docs/typescript-plan.md`.
 
 Core routes currently covered:
 
