@@ -5,9 +5,9 @@
 
 // Placeholder mock database (this would normally be a real database like PostgreSQL)
 const mockInvoices = [
-  { id: 'inv_1', status: 'pending_verification', amount: 1000, clientName: 'Alice Corp', ownerId: 'user_1' },
-  { id: 'inv_2', status: 'verified', amount: 2000, clientName: 'Bob Inc', ownerId: 'user_1' },
-  { id: 'inv_3', status: 'funded', amount: 5000, clientName: 'Charlie Ltd', ownerId: 'user_2' },
+  { id: 'inv_1', status: 'pending_verification', amount: 1000, customer: 'Alice Corp', ownerId: 'user_1' },
+  { id: 'inv_2', status: 'verified', amount: 2000, customer: 'Bob Inc', ownerId: 'user_1' },
+  { id: 'inv_3', status: 'funded', amount: 5000, customer: 'Charlie Ltd', ownerId: 'user_2' },
 ];
 
 /**
