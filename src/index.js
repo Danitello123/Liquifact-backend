@@ -348,6 +348,7 @@ const requestId = require('./middleware/requestId');
 const pinoHttp = require('pino-http');
 const investRoutes = require('./routes/invest');
 const invoiceFileRouter = require('./routes/invoiceFile');
+const adminEscrowRouter = require('./routes/adminEscrow');
 
 const PORT = process.env.PORT || 3001;
 
@@ -420,6 +421,7 @@ function createApp(options = {}) {
   app.use('/api/sme', smeRouter);
   app.use('/api/invest', investRoutes);
   app.use('/api/invoices', invoiceFileRouter);
+  app.use('/api/admin/escrow', adminEscrowRouter);
 
   app.get('/health', async (req, res) => {
     const health = await performHealthChecks();
