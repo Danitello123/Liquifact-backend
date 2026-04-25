@@ -107,6 +107,9 @@ Thumbs.db
 .vscode/
 *.swp
 
+# Codex CLI workspace metadata
+.codex/
+
 # Target (from incoming commit)
 .target
 

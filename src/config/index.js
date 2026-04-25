@@ -9,13 +9,15 @@ const z = require('zod');
 /**
  * Complete configuration schema with defaults and validation.
  * Secrets have no defaults - must be provided.
- * @type {z.ZodObject<{ NODE_ENV: z.ZodEnum<[\"development\", \"production\", \"test\"]>; PORT: z.ZodNumber<z.ZodTypeAny>; JWT_SECRET: z.ZodString; CORS_ALLOWED_ORIGINS: z.ZodString; }>}
+ * @type {z.ZodObject<any>}
  */
 const ConfigSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().min(1).max(65535).default(3001),
   JWT_SECRET: z.string().min(32), // No default for security
   CORS_ALLOWED_ORIGINS: z.string().optional(), // Comma-separated, optional for dev fallbacks
+  SOROBAN_RPC_URL: z.string().url().default('https://soroban-testnet.stellar.org'),
+  NETWORK_PASSPHRASE: z.string().default('Test SDF Network ; September 2015'),
 });
 
 /**
@@ -56,4 +58,3 @@ module.exports = {
   get,
   ConfigSchema,
 };
-
