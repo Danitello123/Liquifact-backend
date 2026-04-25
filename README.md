@@ -100,6 +100,65 @@ liquifact-backend/
 
 ---
 
+## Escrow Address Mapping
+
+The API supports invoice-to-escrow contract address resolution using environment-based configuration for early phases. This allows mapping invoice IDs to their corresponding Stellar escrow contract addresses without requiring on-chain registry lookups.
+
+### Configuration
+
+Configure escrow mappings using the `ESCROW_ADDR_BY_INVOICE` environment variable:
+
+```bash
+ESCROW_ADDR_BY_INVOICE='{"mappings":[{"invoiceId":"inv_demo_001","escrowAddress":"GABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEFGHIJKLM","environment":"development","isActive":true}],"defaultEnvironment":"development","allowlistEnabled":true,"cacheEnabled":true,"cacheTtlSeconds":300}'
+```
+
+### Security Features
+
+- **Allowlist Validation**: Only mapped invoices can be resolved
+- **Environment Separation**: Different mappings for development, staging, production
+- **Address Validation**: Ensures Stellar addresses are properly formatted
+- **Caching**: In-memory caching with configurable TTL
+- **Input Validation**: Strict validation of invoice IDs and addresses
+
+### Usage Examples
+
+The mapping system is automatically used by escrow endpoints. When resolving `/api/escrow/:invoiceId`, the system:
+
+1. Validates the invoice ID format
+2. Checks if the invoice is in the allowlist for the current environment
+3. Returns the corresponding Stellar escrow contract address
+4. Caches the result for subsequent requests
+
+### Rotation and Multi-Environment Support
+
+For production deployments:
+
+1. **Environment Separation**: Use different mappings per environment
+2. **Key Rotation**: Update mappings by modifying the environment variable
+3. **Monitoring**: Use health checks to validate mapping configuration
+4. **Security**: Only map invoices you own or have explicit permission to map
+
+### Configuration Schema
+
+```json
+{
+  "mappings": [
+    {
+      "invoiceId": "inv_123",
+      "escrowAddress": "GABC...123",
+      "environment": "development",
+      "isActive": true
+    }
+  ],
+  "defaultEnvironment": "development",
+  "allowlistEnabled": true,
+  "cacheEnabled": true,
+  "cacheTtlSeconds": 300
+}
+```
+
+---
+
 ## Load baseline suite
 
 The repo includes a focused load baseline suite for representative core endpoint reads:
