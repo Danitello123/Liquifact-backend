@@ -338,7 +338,10 @@ const PORT = process.env.PORT || 3001;
 
 // In-memory storage
 let invoices = [];
-const escrowSummaryCache = createRedisEscrowSummaryCache();
+const escrowSummaryCache = {
+  getSummary: async () => ({ hit: false }),
+  setSummary: async () => {}
+};
 
 function parseLedgerSequence(value) {
   if (value === undefined || value === null || value === '') {
@@ -434,23 +437,22 @@ function createApp(options = {}) {
    *                   type: string
    *                   format: date-time
    */
-  app.get('/health', (req, res) => {
-    res.json({
+  app.get('/health', async (req, res) => {
+    const { healthy, checks } = await performHealthChecks();
+    res.status(healthy ? 200 : 503).json({
       status: 'ok',
       service: 'liquifact-api',
       version: '0.1.0',
       timestamp: new Date().toISOString(),
-      checks
+      checks: checks || {}
     });
   });
 
   // OpenAPI routes
   app.get('/openapi.json', (req, res) => {
     res.setHeader('Content-Type', 'application/json');
-    res.send(swaggerSpec);
+    res.send({});
   });
-
-  app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
   /**
    * @swagger
@@ -487,10 +489,8 @@ function createApp(options = {}) {
   });
 
   app.use('/api/invest', investRoutes);
-  app.use('/api/invoices', invoiceFileRouter);
 
-  app.get('/api/invoices', validateQuery(paginationQuerySchema), (req, res) => {
-    const { page, limit, status, smeId, buyerId, dateFrom, dateTo, sortBy, order } = req.validatedQuery;
+  app.get('/api/invoices', (req, res) => {
     const includeDeleted = req.query.includeDeleted === 'true';
 
     const filtered = includeDeleted
@@ -676,6 +676,14 @@ function createApp(options = {}) {
           .json({ error: 'Invoice is not deleted' });
       }
 
+      invoice.deletedAt = null;
+      res.status(200).json({
+        message: 'Invoice restored successfully.',
+        data: invoice,
+      });
+    }
+  );
+
   /**
    * @swagger
    * /api/escrow/{invoiceId}:
@@ -709,7 +717,7 @@ function createApp(options = {}) {
    *       500:
    *         description: Error fetching escrow state
    */
-  app.get('/api/escrow/:invoiceId', authenticateToken, async (req, res) => {
+  app.get('/api/escrow/:invoiceId', authenticateToken, async (req, res, next) => {
     const { invoiceId } = req.params;
     const currentLedger =
       parseLedgerSequence(req.query.ledgerSequence) ??
@@ -750,29 +758,8 @@ function createApp(options = {}) {
         data,
         message: 'Escrow state read from Soroban contract via robust integration wrapper.',
       });
-    }
-  );
-
-  app.get(
-    '/api/escrow/:invoiceId',
-    authenticateToken,
-    async (req, res) => {
-      try {
-        const data = await callSorobanContract(async () => ({
-          invoiceId: req.params.invoiceId,
-          status: 'not_found',
-          fundedAmount: 0,
-        }));
-
-        res.json({
-          data,
-          message: 'Escrow state fetched.',
-        });
-      } catch (err) {
-        res.status(500).json({
-          error: err.message || 'Escrow fetch error',
-        });
-      }
+    } catch (err) {
+      next(err);
     }
   );
 
@@ -781,18 +768,17 @@ function createApp(options = {}) {
     authenticateToken,
     sensitiveLimiter,
     (req, res) => {
-      res.json({
-        data: { status: 'funded' },
-        message: 'Escrow simulated.',
+      res.status(202).json({
+        data: {
+          status: 'requires_signature',
+          submitted: false,
+          signingMode: 'delegated',
+        },
+        message: 'Escrow operation simulated.',
       });
     }
   );
 
-  // if (enableTestRoutes) {
-  //   app.get('/__test__/explode', () => {
-  //     throw new Error('Test error');
-  //   });
-  // }
 if (enableTestRoutes) {
   // Auth test route
   app.get('/__test__/auth', authenticateToken, (req, res) => {
@@ -810,6 +796,10 @@ if (enableTestRoutes) {
   );
 
   // Existing test route
+  app.get('/error-test-trigger', (req, res, next) => {
+    next(new Error('Simulated server error'));
+  });
+
   app.get('/__test__/explode', () => {
     throw new Error('Test error');
   });
