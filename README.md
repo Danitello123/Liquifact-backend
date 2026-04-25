@@ -10,6 +10,7 @@ Part of the LiquiFact stack: frontend (Next.js) | backend (this repo) | contract
 
 - Node.js 20+ (LTS recommended)
 - npm 9+
+- Docker & Docker Compose (for local PostgreSQL)
 
 ---
 
@@ -28,10 +29,23 @@ Part of the LiquiFact stack: frontend (Next.js) | backend (this repo) | contract
    npm install
    ```
 
-3. Configure environment if needed
+3. Configure environment
 
    ```bash
    cp .env.example .env
+   # Edit .env with your database configuration
+   ```
+
+4. Start database services
+
+   ```bash
+   docker-compose -f docker-compose.dev.yml up -d
+   ```
+
+5. Run database migrations
+
+   ```bash
+   npm run db:migrate
    ```
 
 ---
@@ -48,6 +62,10 @@ Part of the LiquiFact stack: frontend (Next.js) | backend (this repo) | contract
 | `npm run start:dist` | Start compiled output from `dist/` |
 | `npm run lint` | Run ESLint on `src/` |
 | `npm test` | Run load helper tests and structured error tests |
+| `npm run db:migrate` | Run database migrations |
+| `npm run db:migrate:down` | Rollback last migration |
+| `npm run db:migrate:create <name>` | Create new migration file |
+| `npm run db:migrate:reset` | Reset database (drop & re-run) |
 | `npm run test:coverage` | Run helper/API tests with coverage |
 | `npm run load:baseline` | Run the core endpoint load baseline suite |
 
@@ -56,6 +74,37 @@ Escrow Redis cache is optional and disabled by default; set `REDIS_ESCROW_CACHE_
 `REDIS_ESCROW_CACHE_TTL_SECONDS` is strictly clamped to `5..300`, and `REDIS_ESCROW_LEDGER_GAP_THRESHOLD` controls ledger-gap invalidation.
 
 Incremental TypeScript setup and migration guidance lives in `docs/typescript-plan.md`.
+
+---
+
+## Database Migrations
+
+This project uses **node-pg-migrate** for database schema management with PostgreSQL. The migration system provides:
+
+- SQL-first migration control with rollback support
+- Multi-tenant architecture with Row Level Security (RLS)
+- Production-safe transaction handling
+- Comprehensive audit logging
+
+### Quick Database Setup
+
+```bash
+# Start PostgreSQL and Redis
+docker-compose -f docker-compose.dev.yml up -d
+
+# Run migrations
+npm run db:migrate
+```
+
+### Key Features
+
+- **Multi-tenant isolation** with tenant-scoped data
+- **Soft deletes** for data recovery
+- **Audit trail** for compliance
+- **UUID primary keys** for distributed systems
+- **JSONB metadata** for schema flexibility
+
+📖 **Full documentation**: See [`DB_MIGRATIONS.md`](./DB_MIGRATIONS.md) for comprehensive migration guide, troubleshooting, and deployment procedures.
 
 ---
 
