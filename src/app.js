@@ -33,6 +33,7 @@ const {
 const { performHealthChecks } = require('./services/health');
 const responseHelper = require('./utils/responseHelper');
 const logger = require('./logger');
+const { metricsAuth, metricsHandler } = require('./metrics');
 
 /**
  * Returns a 403 JSON response only for the dedicated blocked-origin CORS error.
@@ -218,7 +219,10 @@ function createApp() {
     next(new Error('Sensitive'));
   });
 
-  // ── 5. 404 catch-all ─────────────────────────────────────────────────────
+  // ── 5. Prometheus metrics ────────────────────────────────────────────────
+  app.get('/metrics', metricsAuth, metricsHandler);
+
+  // ── 6. 404 catch-all ─────────────────────────────────────────────────────
   app.use((req, res) => {
     res.status(404).json({ error: 'Not found', path: req.path });
   });

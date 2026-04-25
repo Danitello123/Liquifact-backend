@@ -181,11 +181,25 @@ describe('LiquiFact API', () => {
       expect(response.body.data).toHaveProperty('invoiceId', '123');
     });
 
-    it('POST /api/escrow - returns simulated escrow payload', async () => {
-      const response = await request(app).post('/api/escrow').set(authHeader()).send({ invoiceId: '  abc-123 \n', fundedAmount: 10 });
+    it('POST /api/escrow - returns no-submit funding intent', async () => {
+      const publicKey = `G${'A'.repeat(55)}`;
+      const response = await request(app)
+        .post('/api/escrow')
+        .set(authHeader())
+        .set('Idempotency-Key', 'fund-abc-123')
+        .send({
+          invoiceId: 'abc-123',
+          funderPublicKey: publicKey,
+          fundedAmount: 10,
+          asset: { code: 'XLM' },
+        });
 
-      expect(response.status).toBe(200);
-      expect(response.body.data).toMatchObject({ status: 'funded' });
+      expect(response.status).toBe(202);
+      expect(response.body.data).toMatchObject({
+        status: 'requires_signature',
+        submitted: false,
+        signingMode: 'delegated',
+      });
     });
   });
 

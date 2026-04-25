@@ -10,6 +10,7 @@ Part of the LiquiFact stack: frontend (Next.js) | backend (this repo) | contract
 
 - Node.js 20+ (LTS recommended)
 - npm 9+
+- Docker & Docker Compose (for local PostgreSQL)
 
 ---
 
@@ -28,11 +29,43 @@ Part of the LiquiFact stack: frontend (Next.js) | backend (this repo) | contract
    npm install
    ```
 
-3. Configure environment if needed
+3. Configure environment
 
    ```bash
    cp .env.example .env
+   # Edit .env with your database configuration
    ```
+
+4. Start database services
+
+   ```bash
+   docker-compose -f docker-compose.dev.yml up -d
+   ```
+
+5. Run database migrations
+
+   ```bash
+   npm run db:migrate
+   ```
+
+---
+
+## Observability
+
+Optional Sentry error tracking is supported through the `SENTRY_DSN` environment variable. When enabled, the server scrubs sensitive values before sending events, including:
+
+- Invoice payload bodies and invoice-related fields
+- Authorization headers and bearer tokens
+- API keys and secret values
+- Stellar XDR / Stellar-specific payloads
+
+Environment variables:
+
+- `SENTRY_DSN` — Optional Sentry DSN. Example: `https://<PUBLIC_KEY>@o<ORG_ID>.ingest.sentry.io/<PROJECT_ID>`
+- `SENTRY_RELEASE` — Optional release tag. Defaults to package version when available.
+- `SENTRY_ENVIRONMENT` — Optional environment tag. Defaults to `NODE_ENV`.
+
+Do not store secrets in source control. Use `.env` locally and deployment secrets in production.
 
 ---
 
@@ -80,19 +113,78 @@ Error: Mismatch: STELLAR_NETWORK=TESTNET requires SOROBAN_RPC_URL="https://sorob
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Start API with watch mode |
+| `npm run dev:ts` | Start API with TS runtime (optional) |
 | `npm run start` | Start API |
+| `npm run typecheck` | Run TypeScript type checking (no emit) |
+| `npm run build` | Compile `src/` to `dist/` |
+| `npm run start:dist` | Start compiled output from `dist/` |
 | `npm run lint` | Run ESLint on `src/` |
 | `npm test` | Run load helper tests and structured error tests |
+| `npm run db:migrate` | Run database migrations |
+| `npm run db:migrate:down` | Rollback last migration |
+| `npm run db:migrate:create <name>` | Create new migration file |
+| `npm run db:migrate:reset` | Reset database (drop & re-run) |
 | `npm run test:coverage` | Run helper/API tests with coverage |
 | `npm run load:baseline` | Run the core endpoint load baseline suite |
 
 Default port: `3001`.
+Escrow Redis cache is optional and disabled by default; set `REDIS_ESCROW_CACHE_ENABLED=true` with `REDIS_URL` to enable it.
+`REDIS_ESCROW_CACHE_TTL_SECONDS` is strictly clamped to `5..300`, and `REDIS_ESCROW_LEDGER_GAP_THRESHOLD` controls ledger-gap invalidation.
+
+Incremental TypeScript setup and migration guidance lives in `docs/typescript-plan.md`.
+
+---
+
+## Database Migrations
+
+This project uses **node-pg-migrate** for database schema management with PostgreSQL. The migration system provides:
+
+- SQL-first migration control with rollback support
+- Multi-tenant architecture with Row Level Security (RLS)
+- Production-safe transaction handling
+- Comprehensive audit logging
+
+### Quick Database Setup
+
+```bash
+# Start PostgreSQL and Redis
+docker-compose -f docker-compose.dev.yml up -d
+
+# Run migrations
+npm run db:migrate
+```
+
+### Key Features
+
+- **Multi-tenant isolation** with tenant-scoped data
+- **Soft deletes** for data recovery
+- **Audit trail** for compliance
+- **UUID primary keys** for distributed systems
+- **JSONB metadata** for schema flexibility
+
+📖 **Full documentation**: See [`DB_MIGRATIONS.md`](./DB_MIGRATIONS.md) for comprehensive migration guide, troubleshooting, and deployment procedures.
+
+---
+
+## API Documentation
+
+The API is documented using OpenAPI 3.0 specification.
+
+- **OpenAPI JSON**: `GET /openapi.json` - Machine-readable API specification
+- **Interactive Docs**: `GET /docs` - Swagger UI for exploring and testing the API
+
+The documentation covers all public endpoints including health checks, invoice management, escrow operations, and investment opportunities.
+
+---
 
 Core routes currently covered:
 
 - Health: `GET /health`
-- Invoices: `GET /api/invoices`
-- Escrow: `GET /api/escrow/:invoiceId`
+- API Info: `GET /api`
+- Invoices: `GET /api/invoices`, `GET /api/invoices/:id`, `POST /api/invoices`, `DELETE /api/invoices/:id`, `PATCH /api/invoices/:id/restore`
+- Escrow: `GET /api/escrow/:invoiceId`, `POST /api/escrow`
+- Investment: `GET /api/invest/opportunities`
+- SME Metrics: `GET /api/sme/metrics`
 
 ---
 
@@ -182,6 +274,37 @@ Do not run the suite against production without explicit approval.
    ```bash
    LOAD_DURATION_SECONDS=20 LOAD_CONNECTIONS=25 LOAD_ESCROW_INVOICE_ID=invoice-123 npm run load:baseline
    ```
+
+---
+
+## E2E Testing (API)
+
+The repository includes a reproducible one-command E2E smoke test script that uses Docker Compose to spin up a fully isolated environment including the API, a test Postgres database, and a mocked Soroban RPC server.
+
+### What is tested
+- Service health: `/health` (verifies API, DB reachability, and Soroban mock integration).
+- Versioned API: `GET /v1/escrow/:invoiceId` (verifies token authentication and Soroban mock state).
+- Backward compatibility: `GET /api/escrow/:invoiceId` (verifies deprecation warning headers).
+
+### How to run
+Ensure you have Docker and Docker Compose installed.
+
+```bash
+npm run e2e:api
+```
+
+The script will:
+1. Build and start the `api`, `db`, and `mock-soroban` services.
+2. Wait for the API to report a healthy status.
+3. Run the Jest smoke test suite against the live containers.
+4. Clean up (shutdown and remove) the containers and volumes.
+
+### Security and Reliability
+- **Isolated Environment**: Uses a dedicated `docker-compose.e2e.yml` and a private network.
+- **Mocked Dependencies**: Points `SOROBAN_RPC_URL` to a local mock server to ensure tests are fast, deterministic, and don't require external network access.
+- **Fail-Fast Healthchecks**: The API and DB services use Docker healthchecks to ensure dependent services only start when their dependencies are ready.
+
+---
 
 ### Reports
 
