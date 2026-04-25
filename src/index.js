@@ -305,6 +305,12 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
+const config = require('./config');
+// Fail-fast boot validation
+if (process.env.NODE_ENV !== 'test') {
+  config.validate();
+}
+
 const { createSecurityMiddleware } = require('./middleware/security');
 const { createCorsOptions } = require('./config/cors');
 const { correlationIdMiddleware } = require('./middleware/correlationId');
@@ -319,6 +325,7 @@ const { authenticateToken } = require('./middleware/auth');
 const smeRouter = require('./routes/sme');
 const errorHandler = require('./middleware/errorHandler');
 const { callSorobanContract } = require('./services/soroban');
+const { performHealthChecks } = require('./services/health');
 const AppError = require('./errors/AppError');
 const logger = require('./logger');
 const requestId = require('./middleware/requestId');
@@ -404,6 +411,7 @@ function createApp(options = {}) {
       service: 'liquifact-api',
       version: '0.1.0',
       timestamp: new Date().toISOString(),
+      checks
     });
   });
 
