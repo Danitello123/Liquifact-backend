@@ -14,6 +14,9 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
+const { validateStellarConfig } = require('./config/stellar');
+validateStellarConfig();
+
 const { createSecurityMiddleware } = require('./middleware/security');
 const { createCorsOptions } = require('./config/cors');
 const { correlationIdMiddleware } = require('./middleware/correlationId');
