@@ -168,6 +168,37 @@ Do not run the suite against production without explicit approval.
    LOAD_DURATION_SECONDS=20 LOAD_CONNECTIONS=25 LOAD_ESCROW_INVOICE_ID=invoice-123 npm run load:baseline
    ```
 
+---
+
+## E2E Testing (API)
+
+The repository includes a reproducible one-command E2E smoke test script that uses Docker Compose to spin up a fully isolated environment including the API, a test Postgres database, and a mocked Soroban RPC server.
+
+### What is tested
+- Service health: `/health` (verifies API, DB reachability, and Soroban mock integration).
+- Versioned API: `GET /v1/escrow/:invoiceId` (verifies token authentication and Soroban mock state).
+- Backward compatibility: `GET /api/escrow/:invoiceId` (verifies deprecation warning headers).
+
+### How to run
+Ensure you have Docker and Docker Compose installed.
+
+```bash
+npm run e2e:api
+```
+
+The script will:
+1. Build and start the `api`, `db`, and `mock-soroban` services.
+2. Wait for the API to report a healthy status.
+3. Run the Jest smoke test suite against the live containers.
+4. Clean up (shutdown and remove) the containers and volumes.
+
+### Security and Reliability
+- **Isolated Environment**: Uses a dedicated `docker-compose.e2e.yml` and a private network.
+- **Mocked Dependencies**: Points `SOROBAN_RPC_URL` to a local mock server to ensure tests are fast, deterministic, and don't require external network access.
+- **Fail-Fast Healthchecks**: The API and DB services use Docker healthchecks to ensure dependent services only start when their dependencies are ready.
+
+---
+
 ### Reports
 
 Each run generates:
