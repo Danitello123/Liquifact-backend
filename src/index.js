@@ -24,6 +24,8 @@ const { authenticateToken } = require('./middleware/auth');
 const smeRouter = require('./routes/sme');
 const errorHandler = require('./middleware/errorHandler');
 const { callSorobanContract } = require('./services/soroban');
+const { readEscrowState } = require('./services/escrowRead');
+const { legalHoldGate } = require('./middleware/legalHoldGate');
 const AppError = require('./errors/AppError');
 const logger = require('./logger');
 const requestId = require('./middleware/requestId');
@@ -184,30 +186,67 @@ function createApp(options = {}) {
     });
   });
 
+  /**
+   * GET /api/escrow/:invoiceId
+   *
+   * Returns on-chain escrow state enriched with the `legal_hold` flag.
+   * Clients MUST check `data.legal_hold` before initiating any funding action.
+   */
   app.get('/api/escrow/:invoiceId', authenticateToken, async (req, res) => {
     const { invoiceId } = req.params;
 
     try {
-      /**
-       * Simulates a Soroban operation for escrow lookup.
-       *
-       * @returns {Promise<object>} Placeholder escrow state.
-       */
-      const operation = async () => {
-        return { invoiceId, status: 'not_found', fundedAmount: 0 };
-      };
-
-      const data = await callSorobanContract(operation);
+      const data = await readEscrowState(invoiceId);
       return res.json({
         data,
         message: 'Escrow state read from Soroban contract via robust integration wrapper.',
       });
     } catch (error) {
-      return res.status(500).json({ error: error.message || 'Error fetching escrow state' });
+      if (error.status === 400) {
+        return res.status(400).json({ error: error.message });
+      }
+      return res.status(500).json({ error: 'Error fetching escrow state' });
     }
   });
 
-  app.post('/api/escrow', authenticateToken, sensitiveLimiter, (req, res) => {
+  /**
+   * POST /api/escrow/:invoiceId/fund
+   *
+   * Initiates a funding action.  Blocked with 502 when the escrow is under
+   * legal hold — checked before any transaction is submitted.
+   */
+  app.post(
+    '/api/escrow/:invoiceId/fund',
+    authenticateToken,
+    sensitiveLimiter,
+    legalHoldGate(),
+    (req, res) => {
+      return res.json({
+        data: { status: 'funded' },
+        message: 'Escrow funding initiated.',
+      });
+    },
+  );
+
+  /**
+   * POST /api/escrow  (legacy — kept for backward compatibility)
+   *
+   * Also gated by legal hold.  Reads invoiceId from the request body.
+   */
+  app.post('/api/escrow', authenticateToken, sensitiveLimiter, async (req, res, next) => {
+    const invoiceId = req.body && req.body.invoiceId;
+    if (invoiceId) {
+      // Inline gate so we don't need a second route param.
+      const { fetchLegalHold } = require('./services/escrowRead');
+      try {
+        const held = await fetchLegalHold(String(invoiceId).trim());
+        if (held) {
+          return res.status(502).json({ error: 'Escrow is under legal hold' });
+        }
+      } catch (err) {
+        return next(err);
+      }
+    }
     return res.json({
       data: { status: 'funded' },
       message: 'Escrow operation simulated.',
