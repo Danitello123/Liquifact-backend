@@ -423,6 +423,7 @@ function createApp(options = {}) {
   app.use('/api/invest', investRoutes);
   app.use('/api/investor', investorRoutes);
   app.use('/api/invoices', invoiceFileRouter);
+  app.use('/api/retention', retentionRoutes);
 
   app.get('/health', async (req, res) => {
     const health = await performHealthChecks();
