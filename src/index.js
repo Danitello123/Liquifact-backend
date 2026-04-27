@@ -341,6 +341,7 @@ const smeRouter = require('./routes/sme');
 const { problemJsonHandler, notFoundHandler } = require('./middleware/problemJson');
 const { callSorobanContract } = require('./services/soroban');
 const { performHealthChecks } = require('./services/health');
+const { resolveEscrowAddress, validateMappingConfig } = require('./config/escrowMap');
 const AppError = require('./errors/AppError');
 const logger = require('./logger');
 const sentry = require('./observability/sentry');
@@ -774,6 +775,55 @@ function createApp(options = {}) {
       parseLedgerSequence(req.headers['x-ledger-sequence']);
 
     try {
+      // Resolve escrow contract address using the mapping system
+      const escrowAddress = resolveEscrowAddress(invoiceId);
+      
+      if (!escrowAddress) {
+        throw new AppError({
+          type: 'https://liquifact.com/probs/not-found',
+          title: 'Escrow Not Found',
+          status: 404,
+          detail: `No escrow contract mapping found for invoice ID '${invoiceId}'`,
+          instance: req.originalUrl,
+        });
+      }
+
+      if (escrowSummaryCache) {
+        const cached = await escrowSummaryCache.getSummary(invoiceId, currentLedger);
+        if (cached.hit) {
+          res.set('X-Cache', 'HIT');
+          res.set('X-Escrow-Address', escrowAddress);
+          return res.json({
+            data: {
+              ...cached.value,
+              escrowAddress,
+            },
+            message: 'Escrow summary served from Redis cache.',
+          });
+        }
+      }
+
+      /**
+       * Soroban operation for escrow lookup using resolved contract address.
+       *
+       * @returns {Promise<object>} Escrow state with contract address.
+       */
+      const operation = async () => {
+        return {
+          invoiceId,
+          escrowAddress,
+          status: 'not_found',
+          fundedAmount: 0,
+          ledgerSequence: currentLedger,
+        };
+      };
+
+      const data = await callSorobanContract(operation);
+      if (escrowSummaryCache) {
+        await escrowSummaryCache.setSummary(invoiceId, data, currentLedger);
+      }
+      res.set('X-Cache', 'MISS');
+      res.set('X-Escrow-Address', escrowAddress);
       const operation = async () => ({
         invoiceId,
         status: 'not_found',
