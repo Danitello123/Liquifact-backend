@@ -738,8 +738,6 @@ function createApp(options = {}) {
    *                   type: string
    *       401:
    *         description: Unauthorized
-   *       404:
-   *         description: Escrow mapping not found
    *       500:
    *         description: Error fetching escrow state
    */
@@ -839,11 +837,6 @@ function createApp(options = {}) {
         message: 'Escrow state read from Soroban contract (mocked).',
       });
     } catch (error) {
-      // Re-throw AppError as-is
-      if (error.type && error.status) {
-        throw error;
-      }
-      
       throw new AppError({
         type: 'https://liquifact.com/probs/service-unavailable',
         title: 'Service Unavailable',
@@ -867,6 +860,11 @@ function createApp(options = {}) {
   // Versioned routes
   app.use('/v1', v1Router);
 
+// if (enableTestRoutes) {
+//   app.get('/__test__/explode', () => {
+//     throw new Error('Test error');
+//   });
+// }
 if (enableTestRoutes) {
   // Auth test route
   app.get('/__test__/auth', authenticateToken, (req, res) => {
