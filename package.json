@@ -16,7 +16,12 @@
     "test": "jest --runInBand --forceExit",
     "test:coverage": "jest --runInBand --forceExit --coverage",
     "test:e2e": "jest tests/e2e/smoke.test.js --runInBand",
-    "e2e:api": "node e2e-runner.js"
+    "e2e:api": "node e2e-runner.js",
+    "db:migrate": "node-pg-migrate up",
+    "db:migrate:down": "node-pg-migrate down",
+    "db:migrate:create": "node-pg-migrate create",
+    "db:migrate:reset": "node-pg-migrate reset",
+    "db:setup": "node-pg-migrate up"
   },
   "keywords": [],
   "author": "",
@@ -36,7 +41,8 @@
       "<rootDir>/tests/integration/errorHandling.test.js",
       "<rootDir>/tests/middleware-security.test.js",
       "<rootDir>/src/__tests__/rateLimit.test.js",
-      "<rootDir>/src/config/index.test.js"
+      "<rootDir>/src/config/index.test.js",
+      "<rootDir>/tests/e2e/smoke.test.js"
     ]
   },
   "dependencies": {
