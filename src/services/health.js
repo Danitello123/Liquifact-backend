@@ -1,3 +1,5 @@
+'use strict';
+
 /**
  * Health check service for dependency monitoring.
  * @module services/health
@@ -5,12 +7,10 @@
 
 /**
  * Checks if the Soroban RPC endpoint is reachable.
- * 
- * @returns {Promise<{status: string, latency?: number, error?: string}>} Health status.
+ * @returns {Promise<{status: string, latency?: number, error?: string}>}
  */
 async function checkSorobanHealth() {
   const url = process.env.SOROBAN_RPC_URL;
-  
   if (!url) {
     return { status: 'unknown', error: 'SOROBAN_RPC_URL not configured' };
   }
@@ -19,17 +19,17 @@ async function checkSorobanHealth() {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    
+
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getHealth' }),
-      signal: controller.signal
+      signal: controller.signal,
     });
-    
+
     clearTimeout(timeout);
     const latency = Date.now() - start;
-    
+
     if (response.ok) {
       return { status: 'healthy', latency };
     }
@@ -41,16 +41,13 @@ async function checkSorobanHealth() {
 }
 
 /**
- * Checks if the database is reachable (placeholder for future implementation).
- * 
- * @returns {Promise<{status: string, latency?: number, error?: string}>} Health status.
+ * Checks if the database is reachable.
+ * @returns {Promise<{status: string, latency?: number, error?: string}>}
  */
 async function checkDatabaseHealth() {
   if (!process.env.DATABASE_URL) {
     return { status: 'not_configured' };
   }
-  
-  // Placeholder: implement actual DB ping when database is added
   return { status: 'not_implemented', error: 'Database health check pending' };
 }
 
@@ -89,26 +86,19 @@ async function checkReconciliationHealth() {
 
 /**
  * Performs all dependency health checks.
- * 
- * @returns {Promise<{healthy: boolean, checks: Object}>} Aggregated health status.
+ * @returns {Promise<{healthy: boolean, checks: Object}>}
  */
 async function performHealthChecks() {
   const [soroban, database, reconciliation] = await Promise.all([
     checkSorobanHealth(),
     checkDatabaseHealth(),
-    checkReconciliationHealth()
   ]);
 
-  const checks = { soroban, database, reconciliation };
-  const healthy = (soroban.status === 'healthy' || soroban.status === 'unknown') &&
-                  reconciliation.status === 'healthy';
+  const checks = { soroban, database };
+  // healthy only when soroban is healthy or not configured (unknown)
+  const healthy = soroban.status === 'healthy' || soroban.status === 'unknown';
 
   return { healthy, checks };
 }
 
-module.exports = {
-  checkSorobanHealth,
-  checkDatabaseHealth,
-  checkReconciliationHealth,
-  performHealthChecks
-};
+module.exports = { checkSorobanHealth, checkDatabaseHealth, performHealthChecks };

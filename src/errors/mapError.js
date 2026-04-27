@@ -39,6 +39,16 @@ function mapError(error) {
     };
   }
 
+  if (error && typeof error === 'object' && error.isCorsOriginRejected === true) {
+    return {
+      status: 403,
+      code: 'FORBIDDEN',
+      message: error.message || 'CORS policy: origin is not allowed.',
+      retryable: false,
+      retryHint: '',
+    };
+  }
+
   if (isBodyParserSyntaxError(error)) {
     return {
       status: 400,

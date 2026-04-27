@@ -1,202 +1,159 @@
-/**
- * Invoice Schema with KYC Status
- * 
- * Defines the invoice data model including KYC compliance fields
- * 
- * @module schemas/invoice
- */
+const { z } = require('zod');
 
-/**
- * @typedef {Object} Invoice
- * @property {string} id - Unique invoice identifier (e.g., inv_1234567890)
- * @property {string} status - Invoice lifecycle status
- *   - pending_verification: Awaiting document validation
- *   - verified: Documents validated, ready for funding
- *   - funded: Capital deployed to escrow
- *   - settled: Loan repaid
- *   - defaulted: Loan defaulted
- * @property {number} amount - Invoice amount in local currency
- * @property {string} customer - Customer/debtor name
- * @property {string} ownerId - User who owns/created the invoice
- * @property {string} smeId - The SME (supplier) ID associated with invoice
- * @property {string} kycStatus - KYC verification status of SME
- *   - pending: KYC not yet initiated
- *   - verified: SME passed KYC verification
- *   - rejected: SME failed KYC verification
- *   - exempted: SME exempted from KYC requirements
- * @property {string} kycRecordId - Reference to KYC verification record
- * @property {string} kycStatusUpdatedAt - Last update timestamp for KYC status
- * @property {string} createdAt - Invoice creation timestamp
- * @property {string|null} deletedAt - Soft deletion timestamp
- */
+const SUPPORTED_CURRENCIES = [
+  'USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'NZD', 'CNY', 'HKD',
+  'SGD', 'SEK', 'NOK', 'DKK', 'MXN', 'BRL', 'INR', 'KRW', 'ZAR', 'NGN',
+  'GHS', 'KES', 'TZS', 'UGX', 'XOF', 'XAF', 'MAD', 'EGP', 'AED', 'SAR',
+];
 
-const invoiceSchema = {
-  id: {
-    type: 'string',
-    required: true,
-    pattern: '^inv_[a-zA-Z0-9_-]+$',
-    description: 'Unique invoice identifier',
-  },
-  status: {
-    type: 'string',
-    enum: ['pending_verification', 'verified', 'funded', 'settled', 'defaulted'],
-    required: true,
-    description: 'Invoice lifecycle status',
-  },
-  amount: {
-    type: 'number',
-    required: true,
-    minimum: 0.01,
-    description: 'Invoice amount',
-  },
-  customer: {
-    type: 'string',
-    required: true,
-    minLength: 1,
-    maxLength: 255,
-    description: 'Customer/debtor name',
-  },
-  ownerId: {
-    type: 'string',
-    required: true,
-    minLength: 1,
-    maxLength: 128,
-    description: 'User ID who owns the invoice',
-  },
-  smeId: {
-    type: 'string',
-    required: false,
-    minLength: 1,
-    maxLength: 128,
-    description: 'SME identifier for KYC linkage',
-  },
-  kycStatus: {
-    type: 'string',
-    enum: ['pending', 'verified', 'rejected', 'exempted'],
-    required: true,
-    default: 'pending',
-    description: 'KYC verification status of SME',
-  },
-  kycRecordId: {
-    type: 'string',
-    required: false,
-    maxLength: 128,
-    description: 'Reference to KYC record for audit trail',
-  },
-  kycStatusUpdatedAt: {
-    type: 'string',
-    format: 'date-time',
-    required: false,
-    description: 'Timestamp of last KYC status update',
-  },
-  createdAt: {
-    type: 'string',
-    format: 'date-time',
-    required: true,
-    description: 'Creation timestamp',
-  },
-  deletedAt: {
-    type: 'string',
-    format: 'date-time',
-    required: false,
-    nullable: true,
-    description: 'Soft deletion timestamp',
-  },
-};
+const VALID_STATUSES = ['paid', 'pending', 'overdue'];
+const VALID_SORT_FIELDS = ['amount', 'date', 'createdAt'];
 
-/**
- * Response DTO for invoice with full KYC context
- * @typedef {Object} InvoiceResponse
- */
-const invoiceResponseSchema = {
-  data: {
-    type: 'object',
-    properties: invoiceSchema,
-    required: Object.keys(invoiceSchema).filter(k => invoiceSchema[k].required),
-  },
-  meta: {
-    type: 'object',
-    properties: {
-      timestamp: { type: 'string', format: 'date-time' },
-      version: { type: 'string' },
-    },
-  },
-  error: {
-    type: 'object',
-    nullable: true,
-  },
-};
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, {
+  message: 'Date must be in YYYY-MM-DD format',
+}).refine((val) => !isNaN(Date.parse(val)), {
+  message: 'Date must be a valid date',
+});
 
-/**
- * Validates invoice data for creation
- * Ensures KYC fields are properly initialized
- * 
- * @param {Object} data - Invoice data to validate
- * @returns {Object} Validation result with errors if any
- */
-function validateInvoiceCreation(data) {
-  const errors = [];
+const currencySchema = z.string()
+  .length(3, { message: 'Currency must be a 3-letter ISO 4217 code' })
+  .refine(
+    (val) => SUPPORTED_CURRENCIES.includes(val.toUpperCase()),
+    { message: `Currency must be one of: ${SUPPORTED_CURRENCIES.join(', ')}` }
+  );
 
-  // Required fields
-  if (!data.id) errors.push('id is required');
-  if (!data.status) errors.push('status is required');
-  if (data.amount === undefined || data.amount === null) {
-    errors.push('amount is required');
-  } else if (typeof data.amount !== 'number' || data.amount < 0.01) {
-    errors.push('amount must be a positive number');
+const invoiceCreateSchema = z.object({
+  amount: z.number()
+    .positive({ message: 'Amount must be a positive number' })
+    .finite({ message: 'Amount must be a finite number' }),
+  dueDate: dateSchema.optional(),
+  buyer: z.string()
+    .min(1, { message: 'Buyer is required' })
+    .max(255, { message: 'Buyer name must not exceed 255 characters' })
+    .trim()
+    .optional(),
+  customer: z.string()
+    .min(1)
+    .max(255)
+    .trim()
+    .optional(),
+  seller: z.string()
+    .min(1, { message: 'Seller is required' })
+    .max(255, { message: 'Seller name must not exceed 255 characters' })
+    .trim()
+    .optional(),
+  currency: currencySchema.optional(),
+  description: z.string()
+    .max(1000, { message: 'Description must not exceed 1000 characters' })
+    .optional(),
+  invoiceNumber: z.string()
+    .max(100, { message: 'Invoice number must not exceed 100 characters' })
+    .optional(),
+}).superRefine((data, ctx) => {
+  // Require either buyer or customer
+  if (!data.buyer && !data.customer) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Buyer is required', path: ['buyer'] });
   }
-  if (!data.customer) errors.push('customer is required');
-  if (!data.ownerId) errors.push('ownerId is required');
-
-  // Enum validation
-  const validStatuses = ['pending_verification', 'verified', 'funded', 'settled', 'defaulted'];
-  if (data.status && !validStatuses.includes(data.status)) {
-    errors.push(`status must be one of: ${validStatuses.join(', ')}`);
+  // If buyer is explicitly provided as empty string, flag it
+  if (data.buyer !== undefined && data.buyer.trim() === '') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Buyer is required', path: ['buyer'] });
   }
-
-  // KYC fields validation (optional at creation, defaults to pending)
-  const validKycStatuses = ['pending', 'verified', 'rejected', 'exempted'];
-  if (data.kycStatus && !validKycStatuses.includes(data.kycStatus)) {
-    errors.push(`kycStatus must be one of: ${validKycStatuses.join(', ')}`);
+  if (data.seller !== undefined && data.seller.trim() === '') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Seller is required', path: ['seller'] });
   }
+});
 
-  return {
-    valid: errors.length === 0,
-    errors,
+const paginationQuerySchema = z.object({
+  page: z.coerce.number()
+    .int({ message: 'Page must be an integer' })
+    .positive({ message: 'Page must be a positive number' })
+    .default(1),
+  limit: z.coerce.number()
+    .int({ message: 'Limit must be an integer' })
+    .min(1, { message: 'Limit must be at least 1' })
+    .max(100, { message: 'Limit must not exceed 100' })
+    .default(20),
+  status: z.enum(VALID_STATUSES, {
+    errorMap: () => ({ message: `Status must be one of: ${VALID_STATUSES.join(', ')}` }),
+  }).optional(),
+  smeId: z.string()
+    .min(1, { message: 'SME ID is required' })
+    .max(100, { message: 'SME ID must not exceed 100 characters' })
+    .optional(),
+  buyerId: z.string()
+    .min(1, { message: 'Buyer ID is required' })
+    .max(100, { message: 'Buyer ID must not exceed 100 characters' })
+    .optional(),
+  dateFrom: dateSchema.optional(),
+  dateTo: dateSchema.optional(),
+  sortBy: z.enum(VALID_SORT_FIELDS, {
+    errorMap: () => ({ message: `SortBy must be one of: ${VALID_SORT_FIELDS.join(', ')}` }),
+  }).optional(),
+  order: z.enum(['asc', 'desc'], {
+    errorMap: () => ({ message: 'Order must be either "asc" or "desc"' }),
+  }).optional(),
+});
+
+function parseValidationErrors(zodError) {
+  const fieldErrors = {};
+  
+  const issues = zodError.errors ?? zodError.issues ?? [];
+  
+  for (const issue of issues) {
+    const path = issue.path?.join('.') ?? '';
+    if (!fieldErrors[path]) {
+      fieldErrors[path] = issue.message;
+    }
+  }
+  
+  return fieldErrors;
+}
+
+function validateBody(schema) {
+  return (req, res, next) => {
+    try {
+      req.validated = schema.parse(req.body);
+      next();
+    } catch (error) {
+      if (error.name === 'ZodError') {
+        const fieldErrors = parseValidationErrors(error);
+        return res.status(400).json({
+          error: 'Validation Failed',
+          message: 'Request body contains invalid or missing fields',
+          fieldErrors,
+        });
+      }
+      next(error);
+    }
   };
 }
 
-/**
- * Validates invoice data for KYC status update
- * 
- * @param {Object} data - Update data
- * @returns {Object} Validation result
- */
-function validateKycStatusUpdate(data) {
-  const errors = [];
-
-  if (!data.kycStatus) {
-    errors.push('kycStatus is required');
-  }
-
-  const validKycStatuses = ['pending', 'verified', 'rejected', 'exempted'];
-  if (data.kycStatus && !validKycStatuses.includes(data.kycStatus)) {
-    errors.push(`kycStatus must be one of: ${validKycStatuses.join(', ')}`);
-  }
-
-  if (data.kycRecordId && typeof data.kycRecordId !== 'string') {
-    errors.push('kycRecordId must be a string');
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
+function validateQuery(schema) {
+  return (req, res, next) => {
+    try {
+      req.validatedQuery = schema.parse(req.query);
+      next();
+    } catch (error) {
+      if (error.name === 'ZodError') {
+        const fieldErrors = parseValidationErrors(error);
+        return res.status(400).json({
+          error: 'Validation Failed',
+          message: 'Query parameters contain invalid values',
+          fieldErrors,
+        });
+      }
+      next(error);
+    }
   };
 }
 
 module.exports = {
-  invoiceSchema,
-  invoiceResponseSchema,
-  validateInvoiceCreation,
-  validateKycStatusUpdate,
+  invoiceCreateSchema,
+  paginationQuerySchema,
+  validateBody,
+  validateQuery,
+  parseValidationErrors,
+  SUPPORTED_CURRENCIES,
+  VALID_STATUSES,
+  VALID_SORT_FIELDS,
 };

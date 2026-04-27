@@ -6,10 +6,22 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
+    "dev:ts": "node --watch -r ts-node/register/transpile-only src/ts-entry.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:jsdoc": "tsc -p tsconfig.checkjs.json --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "start:dist": "node dist/index.js",
     "test": "jest --runInBand --forceExit",
-    "test:coverage": "jest --runInBand --forceExit --coverage"
+    "test:coverage": "jest --runInBand --forceExit --coverage",
+    "test:e2e": "jest tests/e2e/smoke.test.js --runInBand",
+    "e2e:api": "node e2e-runner.js",
+    "db:migrate": "node-pg-migrate up",
+    "db:migrate:down": "node-pg-migrate down",
+    "db:migrate:create": "node-pg-migrate create",
+    "db:migrate:reset": "node-pg-migrate reset",
+    "db:setup": "node-pg-migrate up"
   },
   "keywords": [],
   "author": "",
@@ -27,10 +39,14 @@
       "<rootDir>/tests/api-errors.test.js",
       "<rootDir>/tests/contract/api-schemas.test.js",
       "<rootDir>/tests/integration/errorHandling.test.js",
-      "<rootDir>/tests/middleware-security.test.js"
+      "<rootDir>/tests/middleware-security.test.js",
+      "<rootDir>/src/__tests__/rateLimit.test.js",
+      "<rootDir>/src/config/index.test.js",
+      "<rootDir>/tests/e2e/smoke.test.js"
     ]
   },
   "dependencies": {
+    "@sentry/node": "^8.0.0",
     "chessify-protocol": "^0.1.0",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
@@ -38,15 +54,15 @@
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "knex": "^3.1.0",
     "nanoid": "^5.1.9",
-    "@sentry/node": "^8.0.0",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
     "pino-pretty": "^13.1.3",
-    "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^5.0.1"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "autocannon": "^8.0.0",
     "c8": "^11.0.0",
     "eslint": "^9.21.0",
@@ -54,6 +70,9 @@
     "eslint-plugin-security": "^3.0.1",
     "globals": "^16.0.0",
     "jest": "^30.3.0",
-    "supertest": "^7.0.0"
+    "sqlite3": "^6.0.1",
+    "supertest": "^7.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
   }
 }
