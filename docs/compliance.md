@@ -175,3 +175,54 @@ It is scoped to the Express backend and aligns with on-chain LiquifactEscrow / S
 - `migrations/202604260001_create_audit_log_events.sql` — append-only audit table
 - `migrations/202604260002_enforce_audit_log_append_only.sql` — append-only DB triggers
 - `migrations/20250425000000_create_retention_system.sql` — retention policy and legal hold schema
+
+## Auditor checklist (quick verification)
+
+- **Verify append-only table exists and contents**:
+
+  - SQL: `SELECT id, event_type, action, actor_type, actor_id, created_at FROM audit_log_events ORDER BY created_at DESC LIMIT 10;`
+
+- **Verify DB triggers enforcing append-only**:
+
+  - SQL: `SELECT tgname FROM pg_trigger WHERE tgrelid = 'audit_log_events'::regclass;`
+  - Expected: `trg_audit_log_no_update`, `trg_audit_log_no_delete` present and `prevent_audit_log_update_or_delete` function exists in `pg_proc`.
+
+- **Confirm redaction works (sample)**:
+
+  - Inspect code: `src/services/auditLogStore.js:redactValue()` and `src/services/auditLog.js:sanitizeSensitiveData()` are used before persistence.
+  - Quick test: create an admin event with a `password` field and confirm `***REDACTED***` appears in `metadata`.
+
+- **Check whether an invoice's audit is persisted to DB**:
+
+  - SQL: `SELECT * FROM audit_log_events WHERE target_type = 'invoice' AND target_id = '<invoice-id>' ORDER BY created_at DESC;`
+  - Note: invoice state transitions are recorded in the in-memory invoice audit (`src/services/auditLog.js`) and are only persisted to `audit_log_events` when routed through `src/middleware/auditLog.js` or `src/services/auditLogStore.js`.
+
+- **Determine when PII for an invoice was purged**:
+
+  - SQL: `SELECT * FROM retention_audit_log WHERE invoice_id = '<invoice-id>' ORDER BY performed_at DESC LIMIT 10;`
+  - If present, `operation = 'pii_purged'` shows which fields were nulled and when.
+
+- **Is this record immutable?**
+
+  - Admin/webhook audit rows (in `audit_log_events`) are enforced immutable by DB triggers (see `migrations/202604260002_enforce_audit_log_append_only.sql`).
+  - Retention audit records (`retention_audit_log`) are write-once by application convention — verify by inspecting `retention_audit_log` contents and `retention_job_executions` for job history.
+
+## Mapping: compliance guarantee → enforcing module/migration
+
+- **Append-only audit storage**: `audit_log_events` table + triggers
+  - Enforced by: `migrations/202604260001_create_audit_log_events.sql`, `migrations/202604260002_enforce_audit_log_append_only.sql`
+  - Instrumentation: `src/services/auditLogStore.js`, `src/middleware/auditLog.js`
+
+- **Invoice state transition audit (in-memory)**:
+  - Instrumentation: `src/services/auditLog.js`, `src/services/invoiceStateMachine.js`
+  - Persistence: via `src/middleware/auditLog.js` or explicit calls to `src/services/auditLogStore.js:appendAuditEvent()`
+
+- **PII redaction**:
+  - Code: `src/services/auditLogStore.js:redactValue()`, `src/services/auditLog.js:sanitizeSensitiveData()`
+
+- **Retention PII purge and job scheduling**:
+  - Enforced/implemented by: `migrations/20250425000000_create_retention_system.sql`, `src/jobs/retentionPurge.js`, `src/routes/retention.js`
+
+- **Legal hold gating**:
+  - Enforcement: `src/middleware/legalHoldGate.js` (runtime gate for funding), `src/jobs/retentionPurge.js:isUnderLegalHold()` (purge exclusion)
+

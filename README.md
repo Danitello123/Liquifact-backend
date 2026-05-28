@@ -69,6 +69,14 @@ Do not store secrets in source control. Use `.env` locally and deployment secret
 
 ---
 
+## Compliance & Retention
+
+- Read the compliance and retention reference docs for auditors and operators:
+  - [docs/compliance.md](docs/compliance.md)
+  - [docs/retention.md](docs/retention.md)
+
+---
+
 ## Stellar Network Configuration
 
 The API enforces a strict matching between `STELLAR_NETWORK` and `SOROBAN_RPC_URL` at boot time. This prevents misconfiguration where a passphrase (network identity) is paired with an incompatible RPC endpoint, which would cause on-chain validation failures.

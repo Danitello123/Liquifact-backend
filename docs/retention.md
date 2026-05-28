@@ -181,6 +181,35 @@ This is enforced both during invoice selection and immediately before purging ea
 - A default 7-year retention policy is created by trigger in `migrations/20250425000000_create_retention_system.sql` for new tenants.
 - Default fields: `customer_name`, `customer_email`, `customer_tax_id`.
 
+## Auditor checklist (quick verification)
+
+- **List recent retention audit entries for an invoice**:
+
+	- SQL: `SELECT * FROM retention_audit_log WHERE invoice_id = '<invoice-id>' ORDER BY performed_at DESC LIMIT 20;`
+
+- **Check whether an invoice's PII fields have been nulled**:
+
+	- SQL: `SELECT id, customer_name, customer_email, customer_tax_id, updated_at FROM invoices WHERE id = '<invoice-id>';`
+	- If PII was purged, the relevant columns will be `NULL` and `retention_audit_log` will show `operation = 'pii_purged'`.
+
+- **Confirm legal hold status for an invoice**:
+
+	- SQL: `SELECT * FROM legal_holds WHERE invoice_id = '<invoice-id>' ORDER BY placed_at DESC LIMIT 5;`
+
+- **Verify retention job executions**:
+
+	- SQL: `SELECT * FROM retention_job_executions WHERE tenant_id = '<tenant-id>' ORDER BY started_at DESC LIMIT 20;`
+
+- **Dry-run evidence**:
+
+	- Dry runs are recorded in `retention_audit_log` with `operation = 'dry_run'`. Use the `retention_job_executions` table to find the execution and then inspect `retention_audit_log` entries linked by `invoice_id`.
+
+## How to answer "is this record purged and why?"
+
+- Check `invoices` for NULLed PII columns — if present, find the corresponding `retention_audit_log` entry showing `operation = 'pii_purged'`, who performed it (`performed_by`) and which `retention_policy` applied.
+- If no purge is present, check `legal_holds` for an active hold that would have excluded the invoice from purge.
+
+
 ## Notes
 
 - Retention does not remove on-chain escrow state or invoice identity.
