@@ -1,6 +1,8 @@
 'use strict';
 
 const db = require('../db/knex');
+const AppError = require('../errors/AppError');
+const logger = require('../logger');
 
 /**
  * Marketplace Service
@@ -100,8 +102,17 @@ async function getMarketplaceInvoices({ tenantId, queryParams }) {
       }
     };
   } catch (error) {
-    console.error('Error fetching marketplace invoices:', error);
-    throw new Error('Database error while fetching marketplace invoices');
+    // Log structured error information without leaking internals to callers
+    logger.error({ err: error, tenantId }, 'Error fetching marketplace invoices');
+
+    // Map DB/internal failures to a controlled RFC7807 AppError (do not expose SQL/stack)
+    throw new AppError({
+      type: 'https://liquifact.com/probs/database-error',
+      title: 'Database Error',
+      status: 502,
+      detail: 'Database error while fetching marketplace invoices',
+      code: 'DATABASE_ERROR'
+    });
   }
 }
 

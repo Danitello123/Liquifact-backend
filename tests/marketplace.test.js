@@ -133,12 +133,19 @@ describe('Marketplace API', () => {
         throw new Error('DB connection failed');
       });
 
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
       const response = await request(app)
         .get('/api/marketplace')
         .set('Authorization', `Bearer ${tokenTenantA}`);
 
-      expect(response.status).toBe(500);
+      // We now map DB/internal failures to a controlled RFC7807 AppError -> 502
+      expect(response.status).toBe(502);
       expect(response.body.error).toBeDefined();
+      expect(response.body.error.code).toBe('DATABASE_ERROR');
+      expect(consoleSpy).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
     });
 
     it('should reject non-public statuses (tenant-private) even when supplied as a filter', async () => {
